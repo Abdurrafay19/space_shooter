@@ -1,9 +1,12 @@
+// Include SFML libraries for graphics and audio functionality
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
+// Include standard C++ libraries for input/output, file handling, and random numbers
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
 #include <ctime>
+// Use standard and SFML namespaces to simplify code syntax
 using namespace std;
 using namespace sf;
 
@@ -11,9 +14,9 @@ using namespace sf;
 const int ROWS = 23;
 const int COLS = 15;
 const int CELL_SIZE = 40;
-const int MARGIN = 40; // Margin around the grid for UI spacing
+const int MARGIN = 40;                                               // Margin around the grid for UI spacing
 const float BULLET_OFFSET_X = (CELL_SIZE - CELL_SIZE * 0.3f) / 2.0f; // Center bullets horizontally
-const float SHIELD_OFFSET = CELL_SIZE * -0.15f; // Center shield overlay
+const float SHIELD_OFFSET = CELL_SIZE * -0.15f;                      // Center shield overlay
 
 // Game States: Constants representing different screens/states of the game
 const int STATE_MENU = 0;
@@ -24,133 +27,161 @@ const int STATE_LEVEL_UP = 4;
 const int STATE_VICTORY = 5;
 const int STATE_PAUSED = 6;
 
+// Main function: Entry point of the program where game execution begins
 int main()
 {
 
-    // Random Number Generator Setup: Seeds the random number generator with the current time
+    // Random Number Generator Setup: Initialize random number generation using current time
+    // This ensures different random sequences each time the game runs
     srand(static_cast<unsigned int>(time(0)));
 
-    // Window Setup: Calculates window size based on grid dimensions and creates the SFML window
-    const int windowWidth = COLS * CELL_SIZE + MARGIN * 2 + 500; // Extra width for side panel (score, lives, etc.)
+    // Window Setup: Calculate the total window dimensions
+    // Width includes: game grid + margins + extra space for UI panel on the right
+    const int windowWidth = COLS * CELL_SIZE + MARGIN * 2 + 500; // Extra 500px for side panel (score, lives, etc.)
+    // Height includes: game grid + top and bottom margins
     const int windowHeight = ROWS * CELL_SIZE + MARGIN * 2;
+    // Create the game window with calculated dimensions and set the title
     RenderWindow window(VideoMode(windowWidth, windowHeight), "Space Shooter");
-    window.setFramerateLimit(60); // Limit frame rate to 60 FPS for smooth gameplay
+    // Limit frame rate to 60 FPS to ensure smooth and consistent gameplay
+    window.setFramerateLimit(60);
 
-    // Save File Handling: Load high score and saved game state
-    int highScore = 0;
-    int savedLives = 0;
-    int savedScore = 0;
-    int savedLevel = 0;
-    bool hasSavedGame = false;
-    string saveFile = "save-file.txt";
-    
+    // Save File Handling: Manage persistent game data (high scores and saved games)
+    // Initialize variables to store loaded data from save file
+    int highScore = 0;        // Best score ever achieved by the player
+    int savedLives = 0;       // Lives remaining in saved game
+    int savedScore = 0;       // Score achieved in saved game
+    int savedLevel = 0;       // Level reached in saved game
+    bool hasSavedGame = false; // Flag indicating if a valid saved game exists
+    string saveFile = "save-file.txt"; // Path to the save file
+
+    // Attempt to open and read the save file
     ifstream inputFile(saveFile);
     if (inputFile.is_open())
     {
-        // File format: highScore lives score level
+        // File format: highScore lives score level (space-separated values)
+        // Read all four values from the file
         inputFile >> highScore >> savedLives >> savedScore >> savedLevel;
         inputFile.close();
+        // Validate if saved game is usable (must have valid level and lives)
         if (savedLevel > 0 && savedLives > 0)
         {
-            hasSavedGame = true;
+            hasSavedGame = true; // Mark that a valid saved game exists
         }
     }
     else
     {
-        // Create the file with initial values: highScore=0, no saved game
+        // If save file doesn't exist, create it with default values
+        // Format: "0 0 0 0" means no high score and no saved game
         ofstream createFile(saveFile);
         if (createFile.is_open())
         {
-            createFile << "0 0 0 0";
+            createFile << "0 0 0 0"; // Initialize with zeros
             createFile.close();
         }
     }
 
-    // Game Variables Setup: Initialize core game state variables
-    int currentState = STATE_MENU;
-    int selectedMenuItem = 0; // Index of the currently selected menu item
-    int lives = 3;            // Player's remaining lives
-    int score = 0;            // Current score (bonus from meteors)
-    int killCount = 0;        // Count of enemies/bosses destroyed
-    int level = 1;            // Current game level
-    const int MAX_LEVEL = 5;  // Maximum level before victory
-    bool isInvincible = false;                 // Flag for temporary invincibility after being hit
-    Clock invincibilityTimer;                  // Timer to track invincibility duration
-    const float INVINCIBILITY_DURATION = 1.0f; // Duration of invincibility in seconds
+    // Game Variables Setup: Initialize all core game state variables
+    int currentState = STATE_MENU;             // Start at main menu screen
+    int selectedMenuItem = 0;                  // Currently highlighted menu option (0 = first item)
+    int lives = 3;                             // Player starts with 3 lives
+    int score = 0;                             // Current game score (points earned from destroying entities)
+    int killCount = 0;                         // Number of enemies/bosses destroyed in current level
+    int level = 1;                             // Current difficulty level (starts at 1)
+    const int MAX_LEVEL = 5;                   // Final level number - winning the game requires completing level 5
+    bool isInvincible = false;                 // Temporary invincibility flag (activated after taking damage)
+    Clock invincibilityTimer;                  // Timer to track how long invincibility has been active
+    const float INVINCIBILITY_DURATION = 1.0f; // Invincibility lasts 1 second after being hit
 
-    // Level Up Effect Setup: Variables for the blinking text effect during level transitions
-    Clock levelUpTimer;
-    bool levelUpBlinkState = true; // Toggles visibility of level up text
-    Clock levelUpBlinkClock;
+    // Level Up Effect Setup: Variables to create animated blinking text during level transitions
+    Clock levelUpTimer;            // Tracks total time spent on level up screen (2 seconds)
+    bool levelUpBlinkState = true; // Controls text visibility - alternates between true/false for blinking
+    Clock levelUpBlinkClock;       // Controls blink timing (toggles every 0.3 seconds)
 
-    // Boss Mechanics Setup: Tracks boss movements to determine when to fire
+    // Boss Mechanics Setup: Counter to control boss firing frequency
+    // Bosses fire bullets every few movements based on current level difficulty
     int bossMoveCounter = 0;
 
-    // Grid System: 2D array representing the game board
-    // 0 = Empty, 1 = Spaceship, 2 = Meteor, 3 = Bullet, 4 = Enemy, 5 = Boss, 6 = Boss Bullet
-    // Note: Shield (when active) is rendered visually but doesn't occupy grid space
-    // Shield powerups use separate array to avoid interference with other entities
-    int grid[ROWS][COLS] = {0};
-    
-    // Separate grid for shield powerups (independent from main grid)
-    const int MAX_SHIELD_POWERUPS = 5;
-    int shieldPowerupRow[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
-    int shieldPowerupCol[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
-    bool shieldPowerupActive[MAX_SHIELD_POWERUPS] = {false, false, false, false, false};
-    int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0}; // -1=left, 0=down, 1=right
+    // Grid System: 2D array representing the game board - this is the core game state
+    // Each cell can contain one entity (or be empty). Cell values represent:
+    // 0 = Empty space (nothing there)
+    // 1 = Player's spaceship
+    // 2 = Meteor (obstacle that gives points when destroyed)
+    // 3 = Player's bullet (moving upward)
+    // 4 = Enemy UFO (moving downward)
+    // 5 = Boss enemy ship (tougher enemy, appears at level 3+)
+    // 6 = Boss bullet (enemy projectile moving downward)
+    // Note: Shield powerups and active shields don't occupy grid cells (tracked separately)
+    int grid[ROWS][COLS] = {0}; // Initialize entire grid to empty
 
-    // Shield System: Track if player has active shield
+    // Shield Powerup System: Separate tracking for shield collectibles (independent from main grid)
+    // This prevents powerups from interfering with game entity collision detection
+    const int MAX_SHIELD_POWERUPS = 5;         // Maximum number of simultaneous shield powerups on screen
+    int shieldPowerupRow[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};      // Row position of each powerup
+    int shieldPowerupCol[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};      // Column position of each powerup
+    bool shieldPowerupActive[MAX_SHIELD_POWERUPS] = {false, false, false, false, false}; // Whether each slot is in use
+    int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0};     // Movement direction (currently unused, all move down)
+
+    // Shield System: Track whether player currently has an active shield
+    // When true, the shield will absorb the next hit and then deactivate
     bool hasShield = false;
 
-    // Hit Effect System: Arrays to manage visual effects when entities are destroyed
-    const int MAX_HIT_EFFECTS = 50;
-    int hitEffectRow[MAX_HIT_EFFECTS] = {0};
-    int hitEffectCol[MAX_HIT_EFFECTS] = {0};
-    float hitEffectTimer[MAX_HIT_EFFECTS] = {0.0f};
-    bool hitEffectActive[MAX_HIT_EFFECTS] = {false};
-    const float HIT_EFFECT_DURATION = 0.3f; // Duration of the hit explosion effect
+    // Hit Effect System: Manage visual explosion effects when entities are destroyed
+    // These arrays track multiple simultaneous explosion animations
+    const int MAX_HIT_EFFECTS = 50;            // Maximum simultaneous explosion effects
+    int hitEffectRow[MAX_HIT_EFFECTS] = {0};   // Row position of each effect
+    int hitEffectCol[MAX_HIT_EFFECTS] = {0};   // Column position of each effect
+    float hitEffectTimer[MAX_HIT_EFFECTS] = {0.0f}; // How long each effect has been displayed
+    bool hitEffectActive[MAX_HIT_EFFECTS] = {false}; // Whether each effect slot is currently in use
+    const float HIT_EFFECT_DURATION = 0.3f;    // Each explosion displays for 0.3 seconds before disappearing
 
-    // Spaceship Initialization: Place player at the bottom center
-    int spaceshipCol = COLS / 2;      // Start column
-    grid[ROWS - 1][spaceshipCol] = 1; // Mark grid position as spaceship
+    // Spaceship Initialization: Set up player's spaceship at starting position
+    int spaceshipCol = COLS / 2;      // Place spaceship in center column (middle of bottom row)
+    grid[ROWS - 1][spaceshipCol] = 1; // Mark the bottom-center grid cell as containing the spaceship
+    // Load spaceship texture from file
     Texture spaceshipTexture;
     if (!spaceshipTexture.loadFromFile("assets/images/player.png"))
     {
+        // If texture fails to load, print error and exit program
         cerr << "Failed to load spaceship texture" << endl;
         return -1;
     }
+    // Create sprite object for the spaceship
     Sprite spaceship;
     spaceship.setTexture(spaceshipTexture);
-    // Scale sprite to fit within a single grid cell
+    // Scale sprite to exactly fit within one grid cell
+    // Calculate scale factors: CELL_SIZE divided by original texture dimensions
     spaceship.setScale(
         static_cast<float>(CELL_SIZE) / spaceshipTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / spaceshipTexture.getSize().y);
 
-    // Life Icon Setup: Used for displaying remaining lives in the UI
+    // Life Icon Setup: Small heart/ship icons displayed in UI to show remaining lives
     Texture lifeTexture;
     if (!lifeTexture.loadFromFile("assets/images/life.png"))
     {
+        // Exit if life icon texture cannot be loaded
         cerr << "Failed to load life texture" << endl;
         return -1;
     }
     Sprite lifeIcon;
     lifeIcon.setTexture(lifeTexture);
-    // Scale life icon to be small (approx 24x24 pixels) to match UI text size
+    // Scale life icon to small size (24x24 pixels) to fit nicely next to UI text
+    // This makes the icon size consistent with text height
     lifeIcon.setScale(
         24.0f / lifeTexture.getSize().x,
         24.0f / lifeTexture.getSize().y);
 
-
-    // Shield PowerUp and shield Setup: Visual representation of the shield power-up
+    // Shield PowerUp and Shield Setup: Load graphics for shield system
+    // First, load the active shield overlay (displayed over spaceship when shield is active)
     Texture shieldTexture;
     if (!shieldTexture.loadFromFile("assets/images/shield.png"))
     {
         cerr << "Failed to load shield texture" << endl;
         return -1;
-    }  
+    }
     Sprite shieldIcon;
     shieldIcon.setTexture(shieldTexture);
-    
+
+    // Second, load the shield powerup collectible (falls from top of screen)
     Texture shieldPowerUpTexture;
     if (!shieldPowerUpTexture.loadFromFile("assets/images/shield-powerup.png"))
     {
@@ -159,16 +190,18 @@ int main()
     }
     Sprite shieldPowerUp;
     shieldPowerUp.setTexture(shieldPowerUpTexture);
+    // Scale powerup to fit exactly within one grid cell
     shieldPowerUp.setScale(
         static_cast<float>(CELL_SIZE) / shieldPowerUpTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / shieldPowerUpTexture.getSize().y);
 
-    // Scale shield to be bigger than spaceship (1.3x)
+    // Scale active shield overlay to be 30% larger than spaceship for visibility
+    // This creates a protective bubble effect around the player
     shieldIcon.setScale(
         static_cast<float>(CELL_SIZE * 1.3f) / shieldTexture.getSize().x,
         static_cast<float>(CELL_SIZE * 1.3f) / shieldTexture.getSize().y);
 
-    // Game Background Setup: Background image for the playing area
+    // Game Background Setup: Load and prepare the playing area background image
     Texture bgTexture;
     if (!bgTexture.loadFromFile("assets/images/backgroundColor.png"))
     {
@@ -177,20 +210,24 @@ int main()
     }
     Sprite background;
     background.setTexture(bgTexture);
-    // Scale background to cover the entire grid area
+    // Scale background to exactly cover the entire game grid (all rows and columns)
+    // This stretches or shrinks the background image to fit perfectly
     background.setScale(
         static_cast<float>(COLS * CELL_SIZE) / bgTexture.getSize().x,
         static_cast<float>(ROWS * CELL_SIZE) / bgTexture.getSize().y);
+    // Position background at top-left of game grid (accounting for margin)
     background.setPosition(MARGIN, MARGIN);
 
-    // Game Border Setup: A black outline around the playing grid
+    // Game Border Setup: Create a decorative border around the game grid
+    // Size matches the grid dimensions exactly
     RectangleShape gameBox(Vector2f(COLS * CELL_SIZE, ROWS * CELL_SIZE));
-    gameBox.setFillColor(Color::Transparent);
-    gameBox.setOutlineThickness(5);
-    gameBox.setOutlineColor(Color::Black);
-    gameBox.setPosition(MARGIN, MARGIN);
+    gameBox.setFillColor(Color::Transparent);  // No fill - just an outline
+    gameBox.setOutlineThickness(5);             // 5-pixel thick border
+    gameBox.setOutlineColor(Color::Black);      // Black colored border
+    gameBox.setPosition(MARGIN, MARGIN);        // Position at top-left of grid
 
-    // Meteor Entity Setup
+    // Meteor Entity Setup: Load meteor obstacle graphics
+    // Meteors are obstacles that fall from the top and can be destroyed for points
     Texture meteorTexture;
     if (!meteorTexture.loadFromFile("assets/images/meteorSmall.png"))
     {
@@ -199,13 +236,15 @@ int main()
     }
     Sprite meteor;
     meteor.setTexture(meteorTexture);
+    // Scale meteor to fit one grid cell
     meteor.setScale(
         static_cast<float>(CELL_SIZE) / meteorTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / meteorTexture.getSize().y);
 
-    /// Enemy Entities Setup
+    /// Enemy Entities Setup: Load graphics for all enemy types
 
-    // Standard Enemy Setup
+    // Standard Enemy Setup: Regular UFO enemies (appear at all levels)
+    // These move downward and must be destroyed to progress
     Texture enemyTexture;
     if (!enemyTexture.loadFromFile("assets/images/enemyUFO.png"))
     {
@@ -214,11 +253,13 @@ int main()
     }
     Sprite enemy;
     enemy.setTexture(enemyTexture);
+    // Scale enemy UFO to fit one grid cell
     enemy.setScale(
         static_cast<float>(CELL_SIZE) / enemyTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / enemyTexture.getSize().y);
 
-    // Boss Enemy Setup
+    // Boss Enemy Setup: Tougher enemies that appear starting at level 3
+    // Bosses are worth more points and can shoot bullets at the player
     Texture bossEnemyTexture;
     if (!bossEnemyTexture.loadFromFile("assets/images/enemyShip.png"))
     {
@@ -227,11 +268,13 @@ int main()
     }
     Sprite bossEnemy;
     bossEnemy.setTexture(bossEnemyTexture);
+    // Scale boss to fit one grid cell
     bossEnemy.setScale(
         static_cast<float>(CELL_SIZE) / bossEnemyTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / bossEnemyTexture.getSize().y);
 
-    // Player Bullet Setup
+    // Player Bullet Setup: Projectiles fired by the player
+    // Bullets move upward and destroy enemies/meteors on contact
     Texture bulletTexture;
     if (!bulletTexture.loadFromFile("assets/images/laserRed.png"))
     {
@@ -240,12 +283,14 @@ int main()
     }
     Sprite bullet;
     bullet.setTexture(bulletTexture);
-    // Scale bullet to be narrower (30% width) and slightly shorter (80% height) than a cell
+    // Scale bullet to be thin and elongated (narrower than full cell)
+    // Width: 30% of cell width, Height: 80% of cell height
     bullet.setScale(
         static_cast<float>(CELL_SIZE * 0.3f) / bulletTexture.getSize().x,
         static_cast<float>(CELL_SIZE * 0.8f) / bulletTexture.getSize().y);
 
-    // Bullet Impact Effect Setup
+    // Bullet Impact Effect Setup: Visual explosion effect when bullets hit targets
+    // Displays briefly when player bullets destroy enemies, meteors, or collide with boss bullets
     Texture bulletHitTexture;
     if (!bulletHitTexture.loadFromFile("assets/images/laserRedShot.png"))
     {
@@ -254,11 +299,13 @@ int main()
     }
     Sprite bulletHit;
     bulletHit.setTexture(bulletHitTexture);
+    // Scale impact effect to fill entire cell for maximum visual impact
     bulletHit.setScale(
         static_cast<float>(CELL_SIZE) / bulletHitTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / bulletHitTexture.getSize().y);
 
-    // Boss Bullet Setup
+    // Boss Bullet Setup: Enemy projectiles fired by boss enemies
+    // These bullets move downward toward the player and must be avoided
     Texture bossBulletTexture;
     if (!bossBulletTexture.loadFromFile("assets/images/laserGreen.png"))
     {
@@ -267,11 +314,14 @@ int main()
     }
     Sprite bossBullet;
     bossBullet.setTexture(bossBulletTexture);
+    // Scale boss bullet similar to player bullet (thin and elongated)
+    // Colored green to differentiate from player's red bullets
     bossBullet.setScale(
         static_cast<float>(CELL_SIZE * 0.3f) / bossBulletTexture.getSize().x,
         static_cast<float>(CELL_SIZE * 0.8f) / bossBulletTexture.getSize().y);
 
-    // Boss Bullet Impact Effect Setup
+    // Boss Bullet Impact Effect Setup: Explosion effect for boss bullet collisions
+    // Displayed when boss bullets hit the player or are destroyed by player bullets
     Texture bossBulletHitTexture;
     if (!bossBulletHitTexture.loadFromFile("assets/images/laserGreenShot.png"))
     {
@@ -280,11 +330,13 @@ int main()
     }
     Sprite bossBulletHit;
     bossBulletHit.setTexture(bossBulletHitTexture);
+    // Scale to fill entire cell (matches other impact effects)
     bossBulletHit.setScale(
         static_cast<float>(CELL_SIZE) / bossBulletHitTexture.getSize().x,
         static_cast<float>(CELL_SIZE) / bossBulletHitTexture.getSize().y);
 
-    // Main Menu Background Setup
+    // Main Menu Background Setup: Starfield background for menu screens
+    // Used in main menu, game over, victory, and instructions screens
     Texture menuBgTexture;
     if (!menuBgTexture.loadFromFile("assets/images/starBackground.png"))
     {
@@ -293,13 +345,15 @@ int main()
     }
     Sprite menuBackground;
     menuBackground.setTexture(menuBgTexture);
-    // Scale menu background to cover the entire window
+    // Scale background to cover entire window (larger than game grid)
     menuBackground.setScale(
         static_cast<float>(windowWidth) / menuBgTexture.getSize().x,
         static_cast<float>(windowHeight) / menuBgTexture.getSize().y);
+    // Position at window origin (0,0)
     menuBackground.setPosition(0, 0);
 
-    // Font Loading
+    // Font Loading: Load the custom font used for all text in the game
+    // This font will be used for menus, UI elements, and all on-screen text
     Font font;
     if (!font.loadFromFile("assets/fonts/font.ttf"))
     {
@@ -307,64 +361,78 @@ int main()
         return -1;
     }
 
-    // Sound Effects Setup
+    // Sound Effects Setup: Load and configure background music
+    // Music plays continuously during menus (stops during gameplay)
     Music bgMusic;
     if (!bgMusic.openFromFile("assets/sounds/bg-music.mp3"))
     {
         cerr << "Failed to load background music" << endl;
         return -1;
     }
-    bgMusic.setLoop(true);
-    bgMusic.setVolume(30);
-    bgMusic.play();
+    bgMusic.setLoop(true);  // Repeat music endlessly
+    bgMusic.setVolume(30);  // Set volume to 30% (not too loud)
+    bgMusic.play();         // Start playing immediately
 
+    // Sound Buffers: Load all sound effect files into memory
+    // Buffers store the raw audio data that Sound objects will play
     SoundBuffer shootBuffer, explosionBuffer, damageBuffer, levelUpBuffer;
     SoundBuffer menuClickBuffer, menuNavBuffer, winBuffer, loseBuffer;
 
+    // Load shooting sound (played when player fires bullets)
     if (!shootBuffer.loadFromFile("assets/sounds/shoot.wav"))
     {
         cerr << "Failed to load shoot sound" << endl;
         return -1;
     }
+    // Load explosion sound (played when enemies/meteors are destroyed)
     if (!explosionBuffer.loadFromFile("assets/sounds/explosion.wav"))
     {
         cerr << "Failed to load explosion sound" << endl;
         return -1;
     }
+    // Load damage sound (played when player is hit)
     if (!damageBuffer.loadFromFile("assets/sounds/damage.mp3"))
     {
         cerr << "Failed to load damage sound" << endl;
         return -1;
     }
+    // Load level up sound (played when advancing to next level or collecting shield)
     if (!levelUpBuffer.loadFromFile("assets/sounds/level-up.mp3"))
     {
         cerr << "Failed to load level up sound" << endl;
         return -1;
     }
+    // Load menu click sound (played when selecting menu items)
     if (!menuClickBuffer.loadFromFile("assets/sounds/menu-click.mp3"))
     {
         cerr << "Failed to load menu click sound" << endl;
         return -1;
     }
+    // Load menu navigation sound (played when moving between menu options)
     if (!menuNavBuffer.loadFromFile("assets/sounds/menu-navigate.wav"))
     {
         cerr << "Failed to load menu navigate sound" << endl;
         return -1;
     }
+    // Load victory sound (played when completing level 5)
     if (!winBuffer.loadFromFile("assets/sounds/win.wav"))
     {
         cerr << "Failed to load win sound" << endl;
         return -1;
     }
+    // Load game over sound (played when all lives are lost)
     if (!loseBuffer.loadFromFile("assets/sounds/lose.wav"))
     {
         cerr << "Failed to load lose sound" << endl;
         return -1;
     }
 
+    // Sound Objects: Create playable sound objects and link them to buffers
+    // These objects can be played multiple times using their associated buffers
     Sound shootSound, explosionSound, damageSound, levelUpSound;
     Sound menuClickSound, menuNavSound, winSound, loseSound;
 
+    // Associate each sound with its corresponding buffer
     shootSound.setBuffer(shootBuffer);
     explosionSound.setBuffer(explosionBuffer);
     damageSound.setBuffer(damageBuffer);
@@ -374,108 +442,127 @@ int main()
     winSound.setBuffer(winBuffer);
     loseSound.setBuffer(loseBuffer);
 
-    // Main Menu Title Setup
-    Text menuTitle("SPACE SHOOTER", font, 40);
-    menuTitle.setFillColor(Color::Yellow);
-    // Center menu title horizontally
+    // Main Menu Title Setup: Large title text displayed at top of main menu
+    Text menuTitle("SPACE SHOOTER", font, 40);  // Text content, font, and size (40pt)
+    menuTitle.setFillColor(Color::Yellow);       // Make title stand out with yellow color
+    // Center title horizontally on screen, position at Y=100 pixels from top
+    // Calculate X position by: (window width / 2) - (text width / 2)
     menuTitle.setPosition(windowWidth / 2 - menuTitle.getLocalBounds().width / 2.0f, 100);
 
-    // Main Menu Items Setup
-    Text menuItems[4];
+    // Main Menu Items Setup: Create array of menu options
+    Text menuItems[4];  // Array holds 4 menu options
+    // Define text for each menu option
     const char menuTexts[4][20] = {"Start Game", "Load Saved Game", "Instructions", "Exit"};
+    // Configure each menu item
     for (int i = 0; i < 4; i++)
     {
-        menuItems[i].setFont(font);
-        menuItems[i].setString(menuTexts[i]);
-        menuItems[i].setCharacterSize(28);
-        menuItems[i].setFillColor(Color::White);
-        // Center each menu item horizontally under the title
+        menuItems[i].setFont(font);              // Apply game font
+        menuItems[i].setString(menuTexts[i]);    // Set text content
+        menuItems[i].setCharacterSize(28);       // Slightly smaller than title (28pt)
+        menuItems[i].setFillColor(Color::White); // Default white (changes to yellow when selected)
+        // Center each menu item horizontally, space them vertically
+        // Y position: 260 + (index * 56) creates even spacing between items
         menuItems[i].setPosition(windowWidth / 2 - menuItems[i].getLocalBounds().width / 2.0f, 260 + i * 56);
     }
 
-    // High Score Display for Main Menu
-    Text menuHighScoreText("High Score: 0", font, 24);
-    menuHighScoreText.setFillColor(Color::Yellow);
+    // High Score Display for Main Menu: Shows best score below title
+    Text menuHighScoreText("High Score: 0", font, 24);  // Initial text (updated dynamically)
+    menuHighScoreText.setFillColor(Color::Yellow);       // Yellow to match title importance
+    // Center horizontally, position between title and menu items
     menuHighScoreText.setPosition(windowWidth / 2 - menuHighScoreText.getLocalBounds().width / 2.0f, 180);
 
-    // Menu Navigation Instructions Setup
+    // Menu Navigation Instructions: Help text at bottom of screen
     Text menuInstructions("Use UP/DOWN or W/S to navigate  |  ENTER to select", font, 18);
-    menuInstructions.setFillColor(Color(150, 150, 150)); // Gray color
+    menuInstructions.setFillColor(Color(150, 150, 150)); // Subtle gray color (less distracting)
+    // Center horizontally, position near bottom of window
     menuInstructions.setPosition(windowWidth / 2 - menuInstructions.getLocalBounds().width / 2.0f, windowHeight - 80);
 
-    /// In-Game UI Elements Setup
+    /// In-Game UI Elements Setup: Text displayed in right panel during gameplay
 
-    // Game Title (displayed during gameplay)
+    // Game Title: Displayed at top of right panel during gameplay
     Text title("Space  Shooter", font, 28);
-    title.setFillColor(Color::Yellow);
-    // Place title to the right of the game grid
+    title.setFillColor(Color::Yellow);  // Yellow for visual prominence
+    // Position in right panel: grid width + margins + 20px padding
     title.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN);
 
-    // Lives Display Text
+    // Lives Display Text: Label for life icons (icons drawn separately)
     Text livesText("Lives:", font, 20);
     livesText.setFillColor(Color::White);
+    // Position below title in right panel
     livesText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 150);
 
-    // Score Display Text
-    Text scoreText("Score: 0", font, 20);
+    // Score Display Text: Shows current points earned
+    Text scoreText("Score: 0", font, 20);  // Updated dynamically during gameplay
     scoreText.setFillColor(Color::White);
+    // Position below lives in right panel
     scoreText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 200);
 
-    // Enemies Killed Display Text
-    Text killsText("Kills: 0/10", font, 20);
+    // Enemies Killed Display Text: Shows progress toward level completion
+    Text killsText("Kills: 0/10", font, 20);  // Format: current/required kills
     killsText.setFillColor(Color::White);
+    // Position below score in right panel
     killsText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 230);
 
-    // Level Display Text
-    Text levelText("Level: 1", font, 20);
+    // Level Display Text: Shows current level number
+    Text levelText("Level: 1", font, 20);  // Updated when level changes
     levelText.setFillColor(Color::White);
+    // Position below kills in right panel
     levelText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 280);
 
-    // High Score Display (Playing Screen)
+    // High Score Display: Shows best score during gameplay (for comparison)
     Text highScoreText("High Score: 0", font, 20);
-    highScoreText.setFillColor(Color::Yellow);
+    highScoreText.setFillColor(Color::Yellow);  // Yellow to stand out
+    // Position below level in right panel
     highScoreText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 330);
 
-    // Game Over Screen Setup
+    // Game Over Screen Setup: Elements displayed when player loses all lives
     Text gameOverTitle("GAME OVER", font, 40);
-    gameOverTitle.setFillColor(Color::Red);
+    gameOverTitle.setFillColor(Color::Red);  // Red color emphasizes failure
+    // Center title at top of screen
     gameOverTitle.setPosition(windowWidth / 2 - gameOverTitle.getLocalBounds().width / 2.0f, 100);
 
-    // Game Over Score Display
-    Text gameOverScore("Final Score: 0", font, 28);
+    // Game Over Score Display: Shows final score achieved in lost game
+    Text gameOverScore("Final Score: 0", font, 28);  // Updated with actual score
     gameOverScore.setFillColor(Color::Yellow);
+    // Center below title
     gameOverScore.setPosition(windowWidth / 2 - gameOverScore.getLocalBounds().width / 2.0f, 200);
 
-    // Game Over Menu Items
-    Text gameOverItems[2];
+    // Game Over Menu Items: Options after losing
+    Text gameOverItems[2];  // Only 2 options: Restart or Main Menu
     const char gameOverTexts[2][20] = {"Restart", "Main Menu"};
     for (int i = 0; i < 2; i++)
     {
         gameOverItems[i].setFont(font);
         gameOverItems[i].setString(gameOverTexts[i]);
         gameOverItems[i].setCharacterSize(28);
-        gameOverItems[i].setFillColor(Color::White);
+        gameOverItems[i].setFillColor(Color::White);  // Changes to yellow when selected
+        // Center horizontally, space vertically below score
         gameOverItems[i].setPosition(windowWidth / 2 - gameOverItems[i].getLocalBounds().width / 2.0f, 300 + i * 56);
     }
 
-    // Game Over Navigation Instructions
+    // Game Over Navigation Instructions: Help text at bottom
     Text gameOverInstructions("Use UP/DOWN or W/S to navigate  |  ENTER to select", font, 18);
-    gameOverInstructions.setFillColor(Color(150, 150, 150));
+    gameOverInstructions.setFillColor(Color(150, 150, 150));  // Subtle gray
+    // Center at bottom of screen
     gameOverInstructions.setPosition(windowWidth / 2 - gameOverInstructions.getLocalBounds().width / 2.0f, windowHeight - 80);
 
-    // Level Up Screen Setup (Centered on the playing grid)
+    // Level Up Screen Setup: Displayed briefly (2 seconds) when advancing levels
+    // Positioned in center of game grid (not full window)
     Text levelUpText("LEVEL UP!", font, 40);
-    levelUpText.setFillColor(Color::Green);
-    // Calculate center of the grid area
+    levelUpText.setFillColor(Color::Green);  // Green indicates success/progress
+    // Calculate center point of the game grid
     float gridCenterX = MARGIN + (COLS * CELL_SIZE) / 2.0f;
     float gridCenterY = MARGIN + (ROWS * CELL_SIZE) / 2.0f;
+    // Center text in middle of grid
     levelUpText.setPosition(gridCenterX - levelUpText.getLocalBounds().width / 2.0f, gridCenterY - levelUpText.getLocalBounds().height / 2.0f - 10);
 
-    // Pause Screen Setup
+    // Pause Screen Setup: Overlay displayed when player presses P
     Text pauseTitle("PAUSED", font, 40);
-    pauseTitle.setFillColor(Color::Cyan);
+    pauseTitle.setFillColor(Color::Cyan);  // Cyan to differentiate from other states
+    // Position above grid center
     pauseTitle.setPosition(gridCenterX - pauseTitle.getLocalBounds().width / 2.0f, gridCenterY - 200);
 
+    // Pause Menu Items: Three options when paused
     Text pauseItems[3];
     const char pauseTexts[3][20] = {"Resume", "Restart", "Save & Quit"};
     for (int i = 0; i < 3; i++)
@@ -483,20 +570,24 @@ int main()
         pauseItems[i].setFont(font);
         pauseItems[i].setString(pauseTexts[i]);
         pauseItems[i].setCharacterSize(28);
-        pauseItems[i].setFillColor(Color::White);
+        pauseItems[i].setFillColor(Color::White);  // Changes to yellow when selected
+        // Center horizontally in grid, space vertically
         pauseItems[i].setPosition(gridCenterX - pauseItems[i].getLocalBounds().width / 2.0f, gridCenterY - 50 + i * 56);
     }
 
-    // Victory Screen Setup
+    // Victory Screen Setup: Displayed when completing level 5
     Text victoryTitle("VICTORY!", font, 40);
-    victoryTitle.setFillColor(Color::Yellow);
+    victoryTitle.setFillColor(Color::Yellow);  // Yellow for celebration
+    // Center at top of full window
     victoryTitle.setPosition(windowWidth / 2 - victoryTitle.getLocalBounds().width / 2.0f, 100);
 
-    // Victory Score Display
+    // Victory Score Display: Shows final score after winning
     Text victoryScore("Final Score: 0", font, 28);
     victoryScore.setFillColor(Color::White);
+    // Center below victory title
     victoryScore.setPosition(windowWidth / 2 - victoryScore.getLocalBounds().width / 2.0f, 200);
 
+    // Victory Menu Items: Options after winning
     Text victoryItems[2];
     const char victoryTexts[2][20] = {"Restart", "Main Menu"};
     for (int i = 0; i < 2; i++)
@@ -505,218 +596,265 @@ int main()
         victoryItems[i].setString(victoryTexts[i]);
         victoryItems[i].setCharacterSize(28);
         victoryItems[i].setFillColor(Color::White);
+        // Center horizontally, space vertically
         victoryItems[i].setPosition(windowWidth / 2 - victoryItems[i].getLocalBounds().width / 2.0f, 300 + i * 56);
     }
 
+    // Victory Navigation Instructions
     Text victoryInstructions("Use UP/DOWN or W/S to navigate  |  ENTER to select", font, 18);
     victoryInstructions.setFillColor(Color(150, 150, 150));
+    // Center at bottom of screen
     victoryInstructions.setPosition(windowWidth / 2 - victoryInstructions.getLocalBounds().width / 2.0f, windowHeight - 80);
 
-    // Instructions Screen Setup
+    // Instructions Screen Setup: Detailed help screen explaining game mechanics
+    // Main title at top
     Text instructionsTitle("HOW TO PLAY", font, 40);
-    instructionsTitle.setFillColor(Color::Yellow);
+    instructionsTitle.setFillColor(Color::Yellow);  // Yellow for visibility
+    // Center horizontally, position near top
     instructionsTitle.setPosition(windowWidth / 2 - instructionsTitle.getLocalBounds().width / 2.0f, 40);
 
-    // Control Instructions Section
-    Text controlsTitle("CONTROLS", font, 24);
-    controlsTitle.setFillColor(Color::Cyan);
+    // Control Instructions Section: Explains keyboard controls
+    Text controlsTitle("CONTROLS", font, 24);  // Section header
+    controlsTitle.setFillColor(Color::Cyan);    // Cyan to differentiate sections
+    // Left-aligned, positioned below main title
     controlsTitle.setPosition(50, 100);
 
+    // Movement controls explanation
     Text moveText("Move Left/Right: A/D or Arrow Keys", font, 18);
     moveText.setFillColor(Color::White);
+    // Indented under CONTROLS section
     moveText.setPosition(50, 140);
 
+    // Shooting controls explanation
     Text shootText("Shoot: SPACEBAR", font, 18);
     shootText.setFillColor(Color::White);
+    // Below movement text
     shootText.setPosition(50, 170);
 
+    // Pause controls explanation
     Text pauseText("Pause: P", font, 18);
     pauseText.setFillColor(Color::White);
+    // Below shooting text
     pauseText.setPosition(50, 200);
 
-    // Entities Explanation Section
-    Text entitiesTitle("ENTITIES", font, 24);
+    // Entities Explanation Section: Describes all game objects with sprites
+    Text entitiesTitle("ENTITIES", font, 24);  // Section header
     entitiesTitle.setFillColor(Color::Cyan);
+    // Below CONTROLS section
     entitiesTitle.setPosition(50, 250);
 
+    // Player spaceship description (sprite shown at X=60)
     Text playerDesc("Your Ship", font, 18);
     playerDesc.setFillColor(Color::White);
+    // Indented to leave room for sprite display
     playerDesc.setPosition(120, 290);
 
+    // Meteor description with point value
     Text meteorDesc("Meteor - 1 Point (Avoid collision!)", font, 18);
     meteorDesc.setFillColor(Color::White);
-    meteorDesc.setPosition(120, 330);
+    playerDesc.setPosition(120, 330);
 
+    // Enemy UFO description with point value
     Text enemyDesc("Enemy - 3 Points (Avoid collision!)", font, 18);
     enemyDesc.setFillColor(Color::White);
     enemyDesc.setPosition(120, 370);
 
+    // Boss enemy description with level requirement
     Text bossDesc("Boss - 5 Points (Level 3+) (Avoid collision!)", font, 18);
     bossDesc.setFillColor(Color::White);
     bossDesc.setPosition(120, 410);
 
+    // Player bullet description
     Text bulletDesc("Your Bullet", font, 18);
     bulletDesc.setFillColor(Color::White);
     bulletDesc.setPosition(120, 450);
 
+    // Boss bullet description (warning to avoid)
     Text bossBulletDesc("Boss Bullet - Avoid!", font, 18);
     bossBulletDesc.setFillColor(Color::White);
     bossBulletDesc.setPosition(120, 490);
 
+    // Life icon description (explains UI element)
     Text lifeDesc("Life Icon - Indicates remaining lives", font, 18);
     lifeDesc.setFillColor(Color::White);
     lifeDesc.setPosition(120, 530);
 
+    // Shield powerup description with level requirement
     Text shieldPowerupDesc("Shield Powerup - Absorbs 1 Hit (Level 3+)", font, 18);
     shieldPowerupDesc.setFillColor(Color::White);
     shieldPowerupDesc.setPosition(120, 570);
 
-    // Game Systems Section
-    Text systemsTitle("GAME SYSTEMS", font, 24);
+    // Game Systems Section: Explains core game mechanics
+    Text systemsTitle("GAME SYSTEMS", font, 24);  // Section header
     systemsTitle.setFillColor(Color::Cyan);
+    // Below ENTITIES section
     systemsTitle.setPosition(50, 620);
 
+    // Lives system explanation
     Text livesDesc("Lives: You start with 3 lives. Lose one when hit any enemy.", font, 18);
     livesDesc.setFillColor(Color::White);
+    // Under GAME SYSTEMS header
     livesDesc.setPosition(50, 660);
 
+    // Level progression explanation
     Text levelsDesc("Levels: Destroy 10 enemies/bosses per level to advance.", font, 18);
     levelsDesc.setFillColor(Color::White);
+    // Below lives description
     levelsDesc.setPosition(50, 690);
 
+    // High score save system explanation
     Text highScoreDesc("High Score: Your best score is saved automatically.", font, 18);
     highScoreDesc.setFillColor(Color::White);
+    // Below levels description
     highScoreDesc.setPosition(50, 720);
 
-    // Objective Section
-    Text objectiveTitle("OBJECTIVE", font, 24);
+    // Objective Section: States win/loss conditions
+    Text objectiveTitle("OBJECTIVE", font, 24);  // Section header
     objectiveTitle.setFillColor(Color::Cyan);
+    // Below GAME SYSTEMS section
     objectiveTitle.setPosition(50, 770);
 
+    // Primary objective: destroy enemies
     Text objective1("- Destroy enemies and bosses", font, 18);
     objective1.setFillColor(Color::White);
+    // Under OBJECTIVE header
     objective1.setPosition(50, 810);
 
+    // Loss condition: don't lose all lives
     Text objective2("- Do not lose all your lives", font, 18);
     objective2.setFillColor(Color::White);
+    // Below first objective
     objective2.setPosition(50, 840);
 
+    // Victory condition: complete level 5
     Text objective3("- Complete Level 5 to win!", font, 18);
     objective3.setFillColor(Color::White);
+    // Below second objective
     objective3.setPosition(50, 870);
 
+    // Empty text placeholder (not currently used)
     Text objective4("", font, 18);
     objective4.setFillColor(Color::White);
     objective4.setPosition(50, 900);
 
+    // Instructions to return to menu
     Text instructionsBack("Press ESC or BACKSPACE to return to menu", font, 18);
-    instructionsBack.setFillColor(Color(150, 150, 150));
+    instructionsBack.setFillColor(Color(150, 150, 150));  // Subtle gray
+    // Centered at bottom of screen
     instructionsBack.setPosition(windowWidth / 2 - instructionsBack.getLocalBounds().width / 2.0f, windowHeight - 80);
 
-    // Game Timing Clocks Setup
+    // Game Timing Clocks Setup: Manage all time-based game events
+    // Clocks track elapsed time and control when actions occur
 
-    // Movement Cooldown: Prevents overly sensitive controls
-    Clock moveClock;
-    Time moveCooldown = milliseconds(100); // 100ms delay between movements
+    // Movement Cooldown: Prevents player movement from being too sensitive
+    Clock moveClock;                       // Tracks time since last movement
+    Time moveCooldown = milliseconds(100); // Require 100ms between movements
 
-    // Meteor Spawning Logic
-    Clock meteorSpawnClock;
-    Clock meteorMoveClock;
-    float nextSpawnTime = 1.0f + (rand() % 3); // Random interval between 1-3 seconds
+    // Meteor Spawning: Controls when new meteors appear at top of screen
+    Clock meteorSpawnClock;                        // Tracks time since last meteor spawn
+    Clock meteorMoveClock;                         // Tracks time since meteors last moved
+    float nextSpawnTime = 1.0f + (rand() % 3);    // First meteor spawns in 1-3 seconds
 
-    // Enemy Spawning Logic
-    Clock enemySpawnClock;
-    Clock enemyMoveClock;
-    float nextEnemySpawnTime = 2.0f + (rand() % 4); // Random interval between 2-5 seconds
+    // Enemy Spawning: Controls when new enemies appear
+    Clock enemySpawnClock;                             // Tracks time since last enemy spawn
+    Clock enemyMoveClock;                              // Tracks time since enemies last moved
+    float nextEnemySpawnTime = 2.0f + (rand() % 4);   // First enemy spawns in 2-5 seconds
 
-    // Boss Spawning Logic (Bosses appear after level 3)
-    Clock bossSpawnClock;
-    Clock bossMoveClock;
-    Clock bossBulletMoveClock;
-    float nextBossSpawnTime = 8.0f + (rand() % 5); // Random interval between 8-12 seconds
+    // Boss Spawning: Controls when boss enemies appear (only at level 3+)
+    Clock bossSpawnClock;                           // Tracks time since last boss spawn
+    Clock bossMoveClock;                            // Tracks time since bosses last moved
+    Clock bossBulletMoveClock;                      // Tracks time since boss bullets last moved
+    float nextBossSpawnTime = 8.0f + (rand() % 5); // First boss spawns in 8-12 seconds
 
-    // Shield Powerup Spawning Logic (Spawns after level 3)
-    Clock shieldPowerupSpawnClock;
-    Clock shieldPowerupMoveClock;
-    float nextShieldPowerupSpawnTime = 15.0f + (rand() % 10); // Random interval between 15-25 seconds
+    // Shield Powerup Spawning: Controls when shield collectibles appear (only at level 3+)
+    Clock shieldPowerupSpawnClock;                       // Tracks time since last powerup spawn
+    Clock shieldPowerupMoveClock;                        // Tracks time since powerups last moved
+    float nextShieldPowerupSpawnTime = 15.0f + (rand() % 10); // First powerup in 15-25 seconds
 
-    // Bullet Firing Logic
-    Clock bulletMoveClock;
-    Clock bulletFireClock;
-    Time bulletFireCooldown = milliseconds(300); // Fire rate limit: 0.3 seconds
+    // Bullet Firing: Controls player shooting rate
+    Clock bulletMoveClock;                     // Tracks time since bullets last moved
+    Clock bulletFireClock;                     // Tracks time since player last fired
+    Time bulletFireCooldown = milliseconds(300); // Player can fire every 0.3 seconds
 
-    // Hit Effect Timer
-    Clock hitEffectClock;
+    // Hit Effect Timer: Controls explosion animation duration
+    Clock hitEffectClock;  // Tracks time to update explosion effects
 
-    // Menu Navigation Cooldown
-    Clock menuClock;
-    Time menuCooldown = milliseconds(200);
+    // Menu Navigation Cooldown: Prevents menu selections from being too sensitive
+    Clock menuClock;                       // Tracks time since last menu action
+    Time menuCooldown = milliseconds(200); // Require 200ms between menu actions
 
-    // Main Game Loop: Runs until the window is closed
+    // Main Game Loop: This loop runs continuously until the player closes the window
+    // Each iteration = one frame of the game (60 times per second)
     while (window.isOpen())
     {
 
-        // Event Polling: Handle window close events
+        // Event Polling: Check for system events (window close, etc.)
+        // This must be done every frame to keep the window responsive
         Event event;
-        while (window.pollEvent(event))
+        while (window.pollEvent(event))  // Process all pending events
         {
+            // If user clicks the X button or uses system close command
             if (event.type == Event::Closed)
-                window.close();
+                window.close();  // Gracefully close the game window
         }
 
-        // State Machine: Handle logic based on current game state
+        // State Machine: Execute logic based on current game state
+        // The game operates in different states (menu, playing, paused, etc.)
         if (currentState == STATE_MENU)
         {
-            // Menu Logic: Handle navigation and selection
+            // Main Menu State: Handle menu navigation and option selection
+            // Only process input if enough time has passed (prevents double-inputs)
             if (menuClock.getElapsedTime() >= menuCooldown)
             {
-                bool menuAction = false;
+                bool menuAction = false;  // Track if any input was received this frame
 
-                // Navigate menu up/down
+                // Navigate menu UP: Move to previous menu item (with wraparound)
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
+                    // Modulo arithmetic for wraparound: (current - 1 + total) % total
                     selectedMenuItem = (selectedMenuItem - 1 + 4) % 4;
-                    menuNavSound.play();
+                    menuNavSound.play();  // Play navigation sound feedback
                     menuAction = true;
                 }
+                // Navigate menu DOWN: Move to next menu item (with wraparound)
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
-                    selectedMenuItem = (selectedMenuItem + 1) % 4;
+                    selectedMenuItem = (selectedMenuItem + 1) % 4;  // Wraparound to first item
                     menuNavSound.play();
                     menuAction = true;
                 }
-                // Select menu item
+                // Select current menu item with Enter key
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
-                    menuClickSound.play();
+                    menuClickSound.play();  // Play selection confirmation sound
                     if (selectedMenuItem == 0)
-                    { // Start Game
-                        bgMusic.stop();
-                        currentState = STATE_PLAYING;
-                        // Reset game state variables for a new game
-                        lives = 3;
-                        score = 0;
-                        killCount = 0;
-                        level = 1;
-                        bossMoveCounter = 0;
-                        hasShield = false;
-                        // Clear the grid
+                    { // Option 0: Start New Game
+                        bgMusic.stop();  // Stop menu music (no music during gameplay)
+                        currentState = STATE_PLAYING;  // Switch to gameplay state
+                        // Reset all game state variables to starting values
+                        lives = 3;           // Start with 3 lives
+                        score = 0;           // Start with 0 score
+                        killCount = 0;       // No enemies killed yet
+                        level = 1;           // Start at level 1
+                        bossMoveCounter = 0; // Reset boss firing counter
+                        hasShield = false;   // No shield at start
+                        // Clear the entire game grid (remove all entities)
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
                             {
-                                grid[r][c] = 0;
+                                grid[r][c] = 0;  // Set each cell to empty
                             }
                         }
-                        // Clear shield powerups
+                        // Deactivate all shield powerups
                         for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
                         {
                             shieldPowerupActive[i] = false;
                         }
-                        // Reset spaceship position
-                        spaceshipCol = COLS / 2;
-                        grid[ROWS - 1][spaceshipCol] = 1;
-                        // Restart all game clocks
+                        // Place spaceship at starting position (bottom center)
+                        spaceshipCol = COLS / 2;                // Center column
+                        grid[ROWS - 1][spaceshipCol] = 1;       // Bottom row
+                        // Restart all timing clocks for fresh game start
                         meteorSpawnClock.restart();
                         meteorMoveClock.restart();
                         enemySpawnClock.restart();
@@ -729,35 +867,35 @@ int main()
                         shieldPowerupMoveClock.restart();
                     }
                     else if (selectedMenuItem == 1)
-                    { // Load Saved Game
-                        if (hasSavedGame)
+                    { // Option 1: Load Saved Game
+                        if (hasSavedGame)  // Only proceed if a valid save exists
                         {
-                            bgMusic.stop();
-                            currentState = STATE_PLAYING;
-                            // Restore saved game state
-                            lives = savedLives;
-                            score = savedScore;
-                            killCount = 0; // Always start kills from 0
-                            level = savedLevel;
-                            bossMoveCounter = 0;
-                            hasShield = false;
-                            // Clear the grid
+                            bgMusic.stop();  // Stop menu music
+                            currentState = STATE_PLAYING;  // Switch to gameplay
+                            // Restore saved game state from loaded variables
+                            lives = savedLives;    // Restore saved lives count
+                            score = savedScore;    // Restore saved score
+                            killCount = 0;         // Always reset kills (level progress)
+                            level = savedLevel;    // Restore saved level
+                            bossMoveCounter = 0;   // Reset boss mechanics
+                            hasShield = false;     // No shield when loading
+                            // Clear the grid for fresh start at saved level
                             for (int r = 0; r < ROWS; r++)
                             {
                                 for (int c = 0; c < COLS; c++)
                                 {
-                                    grid[r][c] = 0;
+                                    grid[r][c] = 0;  // Empty all cells
                                 }
                             }
-                            // Clear shield powerups
+                            // Clear any shield powerups
                             for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
                             {
                                 shieldPowerupActive[i] = false;
                             }
-                            // Reset spaceship position
+                            // Place spaceship at starting position
                             spaceshipCol = COLS / 2;
                             grid[ROWS - 1][spaceshipCol] = 1;
-                            // Restart all game clocks
+                            // Restart all timing clocks
                             meteorSpawnClock.restart();
                             meteorMoveClock.restart();
                             enemySpawnClock.restart();
@@ -771,83 +909,91 @@ int main()
                         }
                         else
                         {
+                            // No saved game exists - do nothing (could show message)
                         }
                     }
                     else if (selectedMenuItem == 2)
-                    { // Instructions
-                        currentState = STATE_INSTRUCTIONS;
+                    { // Option 2: View Instructions
+                        currentState = STATE_INSTRUCTIONS;  // Switch to instructions screen
                     }
                     else if (selectedMenuItem == 3)
-                    { // Exit
-                        bgMusic.stop();
-                        window.close();
+                    { // Option 3: Exit Game
+                        bgMusic.stop();  // Stop music before closing
+                        window.close();  // Close the game window and exit program
                     }
-                    menuAction = true;
+                    menuAction = true;  // Mark that a menu action occurred
                 }
 
+                // If any input was received, restart cooldown timer
                 if (menuAction)
                 {
-                    menuClock.restart();
+                    menuClock.restart();  // Prevents rapid repeated inputs
                 }
             }
 
-            // Update menu item colors to highlight selection
+            // Visual Feedback: Update menu item colors based on selection
+            // Highlighted item turns yellow, others remain white
             for (int i = 0; i < 4; i++)
             {
                 if (i == selectedMenuItem)
                 {
-                    menuItems[i].setFillColor(Color::Yellow);
+                    menuItems[i].setFillColor(Color::Yellow);  // Highlight selected
                 }
                 else
                 {
-                    menuItems[i].setFillColor(Color::White);
+                    menuItems[i].setFillColor(Color::White);  // Default color
                 }
             }
-        }
-        // Game Over State Logic
+        }  // End of STATE_MENU
+        // Game Over State: Player has lost all lives
         else if (currentState == STATE_GAME_OVER)
         {
-            // Game over menu navigation with cooldown
+            // Game over menu navigation with cooldown (prevents accidental double-selections)
             if (menuClock.getElapsedTime() >= menuCooldown)
             {
-                bool menuAction = false;
+                bool menuAction = false;  // Track if input received
 
-                // Navigate game over menu up/down
+                // Navigate UP through game over options (only 2 options)
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
+                    // Wraparound between 2 items: (current - 1 + 2) % 2
                     selectedMenuItem = (selectedMenuItem - 1 + 2) % 2;
-                    menuNavSound.play();
+                    menuNavSound.play();  // Audio feedback
                     menuAction = true;
                 }
+                // Navigate DOWN through game over options
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
-                    selectedMenuItem = (selectedMenuItem + 1) % 2;
+                    selectedMenuItem = (selectedMenuItem + 1) % 2;  // Wraparound
                     menuNavSound.play();
                     menuAction = true;
                 }
-                // Select game over menu item
+                // Select game over menu item with Enter
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
-                    menuClickSound.play();
+                    menuClickSound.play();  // Confirmation sound
                     if (selectedMenuItem == 0)
-                    { // Restart Game
+                    { // Option 0: Restart Game (start fresh from level 1)
                         currentState = STATE_PLAYING;
-                        // Reset game state
-                        lives = 3;
-                        score = 0;
-                        killCount = 0;
-                        level = 1;
-                        bossMoveCounter = 0;
-                        hasShield = false;
+                        // Reset all game state to initial values
+                        lives = 3;           // Restore starting lives
+                        score = 0;           // Reset score to zero
+                        killCount = 0;       // Reset kill counter
+                        level = 1;           // Return to level 1
+                        bossMoveCounter = 0; // Reset boss mechanics
+                        hasShield = false;   // Remove any shield
+                        // Clear the entire game grid
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
                             {
-                                grid[r][c] = 0;
+                                grid[r][c] = 0;  // Empty each cell
                             }
                         }
-                        spaceshipCol = COLS / 2;
-                        grid[ROWS - 1][spaceshipCol] = 1;
+                        // Reset spaceship to starting position
+                        spaceshipCol = COLS / 2;             // Center column
+                        grid[ROWS - 1][spaceshipCol] = 1;    // Bottom row
+                        // Restart all game timing clocks
                         meteorSpawnClock.restart();
                         meteorMoveClock.restart();
                         enemySpawnClock.restart();
@@ -858,132 +1004,144 @@ int main()
                         bulletMoveClock.restart();
                     }
                     else if (selectedMenuItem == 1)
-                    { // Return to Main Menu
+                    { // Option 1: Return to Main Menu
+                        // Restart background music if not already playing
                         if (bgMusic.getStatus() != Music::Playing)
                         {
                             bgMusic.play();
                         }
-                        currentState = STATE_MENU;
-                        selectedMenuItem = 0;
+                        currentState = STATE_MENU;  // Switch to menu state
+                        selectedMenuItem = 0;        // Reset to first menu item
                     }
                     menuAction = true;
                 }
 
+                // Reset cooldown timer if input was received
                 if (menuAction)
                 {
                     menuClock.restart();
                 }
             }
 
-            // Update game over item colors based on selection
+            // Visual Feedback: Highlight selected game over option
             for (int i = 0; i < 2; i++)
             {
                 if (i == selectedMenuItem)
                 {
-                    gameOverItems[i].setFillColor(Color::Yellow);
+                    gameOverItems[i].setFillColor(Color::Yellow);  // Highlight selected
                 }
                 else
                 {
-                    gameOverItems[i].setFillColor(Color::White);
+                    gameOverItems[i].setFillColor(Color::White);  // Default white
                 }
             }
-        }
-        // Instructions Screen Logic
+        }  // End of STATE_GAME_OVER
+        // Instructions Screen State: Display help information
         else if (currentState == STATE_INSTRUCTIONS)
         {
-            // Check for input to return to menu
+            // Wait for player to press ESC or Backspace to return to menu
             if (menuClock.getElapsedTime() >= menuCooldown)
             {
+                // Check for exit input
                 if (Keyboard::isKeyPressed(Keyboard::Escape) || Keyboard::isKeyPressed(Keyboard::BackSpace))
                 {
-                    menuClickSound.play();
-                    currentState = STATE_MENU;
-                    selectedMenuItem = 0;
-                    menuClock.restart();
+                    menuClickSound.play();       // Play sound feedback
+                    currentState = STATE_MENU;   // Return to main menu
+                    selectedMenuItem = 0;         // Reset selection to first item
+                    menuClock.restart();          // Reset cooldown
                 }
             }
-        }
-        // Gameplay State Logic: Main game mechanics happen here
+        }  // End of STATE_INSTRUCTIONS
+        // Gameplay State: Main game logic - this is where the action happens!
         else if (currentState == STATE_PLAYING)
         {
-            // Check for pause input
+            // Pause Game Check: Allow player to pause at any time
             if (menuClock.getElapsedTime() >= menuCooldown)
             {
+                // Press P to pause the game
                 if (Keyboard::isKeyPressed(Keyboard::P))
                 {
-                    currentState = STATE_PAUSED;
-                    selectedMenuItem = 0;
-                    menuClock.restart();
+                    currentState = STATE_PAUSED;  // Switch to pause state
+                    selectedMenuItem = 0;          // Default to first pause option
+                    menuClock.restart();           // Reset input cooldown
                 }
             }
 
-            // Player Movement Logic: Handle Left/Right input
+            // Player Movement Logic: Handle horizontal spaceship movement
+            // Only allow movement if cooldown has elapsed (prevents too-fast movement)
             if (moveClock.getElapsedTime() >= moveCooldown)
             {
-                bool moved = false;
-                // Move Left
+                bool moved = false;  // Track if movement occurred this frame
+                // Move Left: A key or Left Arrow
                 if ((Keyboard::isKeyPressed(Keyboard::Left) || Keyboard::isKeyPressed(Keyboard::A)) && spaceshipCol > 0)
                 {
-                    grid[ROWS - 1][spaceshipCol] = 0; // Clear old position
-                    spaceshipCol--;
-                    grid[ROWS - 1][spaceshipCol] = 1; // Set new position
+                    grid[ROWS - 1][spaceshipCol] = 0; // Clear current position in grid
+                    spaceshipCol--;                    // Decrease column (move left)
+                    grid[ROWS - 1][spaceshipCol] = 1; // Mark new position in grid
                     moved = true;
                 }
-                // Move Right
+                // Move Right: D key or Right Arrow
                 else if ((Keyboard::isKeyPressed(Keyboard::Right) || Keyboard::isKeyPressed(Keyboard::D)) && spaceshipCol < COLS - 1)
                 {
-                    grid[ROWS - 1][spaceshipCol] = 0; // Clear old position
-                    spaceshipCol++;
-                    grid[ROWS - 1][spaceshipCol] = 1; // Set new position
+                    grid[ROWS - 1][spaceshipCol] = 0; // Clear current position
+                    spaceshipCol++;                    // Increase column (move right)
+                    grid[ROWS - 1][spaceshipCol] = 1; // Mark new position
                     moved = true;
                 }
 
+                // If movement occurred, restart cooldown timer
                 if (moved)
                 {
                     moveClock.restart();
                 }
             }
 
-            // Player Shooting Logic
+            // Player Shooting Logic: Fire bullets upward with SPACEBAR
+            // Only fire if cooldown has elapsed (prevents spam)
             if (Keyboard::isKeyPressed(Keyboard::Space) && bulletFireClock.getElapsedTime() >= bulletFireCooldown)
             {
-                // Fire bullet from position immediately above spaceship
-                int bulletRow = ROWS - 2;
+                // Spawn bullet in row directly above spaceship
+                int bulletRow = ROWS - 2;  // One row above bottom
+                // Only spawn if that cell is empty (no collision)
                 if (bulletRow >= 0 && grid[bulletRow][spaceshipCol] == 0)
                 {
-                    grid[bulletRow][spaceshipCol] = 3; // 3 represents bullet
-                    shootSound.play();
+                    grid[bulletRow][spaceshipCol] = 3; // Grid value 3 = player bullet
+                    shootSound.play();                  // Play shooting sound effect
                 }
-                bulletFireCooldown = milliseconds(300);
-                bulletFireClock.restart();
+                bulletFireCooldown = milliseconds(300);  // Set cooldown to 0.3 seconds
+                bulletFireClock.restart();               // Start cooldown timer
             }
 
-            // Meteor Spawning Logic
+            // Meteor Spawning Logic: Randomly spawn meteors at top of screen
+            // Check if enough time has passed since last meteor spawn
             if (meteorSpawnClock.getElapsedTime().asSeconds() >= nextSpawnTime)
             {
-                int randomCol = rand() % COLS;
-                // Only spawn if the top row at that column is empty
+                int randomCol = rand() % COLS;  // Choose random column
+                // Only spawn meteor if top row at that column is empty
                 if (grid[0][randomCol] == 0)
                 {
-                    grid[0][randomCol] = 2; // 2 represents meteor
+                    grid[0][randomCol] = 2; // Grid value 2 = meteor
                 }
-                meteorSpawnClock.restart();
-                nextSpawnTime = 1.0f + (rand() % 3); // Next spawn in 1-3 seconds
+                meteorSpawnClock.restart();             // Reset spawn timer
+                nextSpawnTime = 1.0f + (rand() % 3);   // Random next spawn: 1-3 seconds
             }
 
-            // Enemy Spawning Logic (Spawn rate increases with level)
+            // Enemy Spawning Logic: Spawn regular enemies at increasing frequency
+            // Spawn rate increases with level (higher levels = more frequent enemies)
             if (enemySpawnClock.getElapsedTime().asSeconds() >= nextEnemySpawnTime)
             {
-                int randomCol = rand() % COLS;
-                // Only spawn if the top row at that column is empty
+                int randomCol = rand() % COLS;  // Random column for spawn
+                // Only spawn if top row cell is empty (prevent overlap)
                 if (grid[0][randomCol] == 0)
                 {
-                    grid[0][randomCol] = 4; // 4 represents enemy
+                    grid[0][randomCol] = 4; // Grid value 4 = enemy
                 }
-                enemySpawnClock.restart();
-                // Calculate next spawn time based on level difficulty
-                float baseTime = 2.5f - (level * 0.4f);
-                float variance = 3.0f - (level * 0.4f);
+                enemySpawnClock.restart();  // Reset spawn timer
+                // Calculate next spawn time with level-based difficulty scaling
+                // Higher levels = shorter wait time between spawns
+                float baseTime = 2.5f - (level * 0.4f);  // Decreases with level
+                float variance = 3.0f - (level * 0.4f);  // Random variation
+                // Ensure minimum spawn time (don't go below 0.5 seconds)
                 if (baseTime < 0.5f)
                     baseTime = 0.5f;
                 if (variance < 1.0f)
@@ -991,146 +1149,158 @@ int main()
                 nextEnemySpawnTime = baseTime + (rand() % (int)variance);
             }
 
-            // Boss Spawning Logic (Only spawns at Level 3 and above)
+            // Boss Spawning Logic: Spawn boss enemies (only at level 3 and above)
+            // Bosses are tougher enemies that can shoot back
             if (level >= 3 && bossSpawnClock.getElapsedTime().asSeconds() >= nextBossSpawnTime)
             {
-                int randomCol = rand() % COLS;
-                // Only spawn if the top row at that column is empty
+                int randomCol = rand() % COLS;  // Random column for boss spawn
+                // Only spawn if top row cell is empty
                 if (grid[0][randomCol] == 0)
                 {
-                    grid[0][randomCol] = 5; // 5 represents boss
+                    grid[0][randomCol] = 5; // Grid value 5 = boss
                 }
-                bossSpawnClock.restart();
-                // Calculate next boss spawn time based on level
-                float bossBaseTime = 10.0f - ((level - 3) * 1.5f);
-                float bossVariance = 4.0f;
+                bossSpawnClock.restart();  // Reset boss spawn timer
+                // Calculate next boss spawn time with level scaling
+                // Higher levels = more frequent boss spawns
+                float bossBaseTime = 10.0f - ((level - 3) * 1.5f);  // Decreases with level
+                float bossVariance = 4.0f;  // Random variation
+                // Ensure minimum time (don't spawn too frequently)
                 if (bossBaseTime < 5.0f)
                     bossBaseTime = 5.0f;
                 nextBossSpawnTime = bossBaseTime + (rand() % (int)bossVariance);
             }
 
-            // Shield Powerup Spawning Logic (Only spawns at Level 3 and above, rare spawn)
+            // Shield Powerup Spawning Logic: Rare collectible that grants protection
+            // Only spawns at level 3+ (adds strategic element to higher levels)
             if (level >= 3 && shieldPowerupSpawnClock.getElapsedTime().asSeconds() >= nextShieldPowerupSpawnTime)
             {
-                // Find an inactive slot for new powerup
+                // Find an available slot in powerup array (max 5 simultaneous powerups)
                 for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
                 {
-                    if (!shieldPowerupActive[i])
+                    if (!shieldPowerupActive[i])  // Found empty slot
                     {
-                        int randomCol = rand() % COLS;
-                        shieldPowerupRow[i] = 0;
+                        int randomCol = rand() % COLS;  // Random spawn column
+                        shieldPowerupRow[i] = 0;        // Spawn at top row
                         shieldPowerupCol[i] = randomCol;
-                        shieldPowerupActive[i] = true;
-                        shieldPowerupDirection[i] = 0; // Start moving down
-                        break;
+                        shieldPowerupActive[i] = true;  // Activate this powerup
+                        shieldPowerupDirection[i] = 0;  // Direction: 0 = down (not used currently)
+                        break;  // Only spawn one powerup at a time
                     }
                 }
-                shieldPowerupSpawnClock.restart();
-                // Calculate next shield powerup spawn time (rarer at level 3-4, less rare at level 5)
+                shieldPowerupSpawnClock.restart();  // Reset spawn timer
+                // Calculate next spawn time based on level (rarer at lower levels)
                 float shieldBaseTime;
                 float shieldVariance;
                 if (level < 5)
                 {
-                    shieldBaseTime = 20.0f; // Rare spawn at levels 3-4
+                    // Levels 3-4: Rare spawn (20-35 second intervals)
+                    shieldBaseTime = 20.0f;
                     shieldVariance = 15.0f;
                 }
                 else
                 {
-                    shieldBaseTime = 12.0f; // Less rare at level 5
+                    // Level 5: More frequent (12-20 second intervals)
+                    shieldBaseTime = 12.0f;
                     shieldVariance = 8.0f;
                 }
                 nextShieldPowerupSpawnTime = shieldBaseTime + (rand() % (int)shieldVariance);
             }
 
-            // Meteor Movement Logic (Speed scales with level, same as enemies)
-            float meteorMoveSpeed = 0.833f - ((level - 1) * 0.1f);
-            if (meteorMoveSpeed < 0.333f)
+            // Meteor Movement Logic: Move all meteors downward at level-adjusted speed
+            // Speed increases with level to make game progressively harder
+            float meteorMoveSpeed = 0.833f - ((level - 1) * 0.1f);  // Base speed decreases with level
+            if (meteorMoveSpeed < 0.333f)  // Cap minimum speed (max difficulty)
                 meteorMoveSpeed = 0.333f;
+            // Check if enough time has passed to move meteors
             if (meteorMoveClock.getElapsedTime().asSeconds() >= meteorMoveSpeed)
             {
-                // Iterate from bottom to top to avoid overwriting entities as they move down
+                // Iterate from bottom to top to avoid processing same meteor twice in one frame
+                // (If we went top-to-bottom, a meteor could move multiple times)
                 for (int r = ROWS - 1; r >= 0; r--)
                 {
                     for (int c = 0; c < COLS; c++)
                     {
                         if (grid[r][c] == 2)
                         { // Found a meteor
-                            // Check if meteor reached the bottom of the grid
+                            // Check if meteor reached the bottom edge
                             if (r == ROWS - 1)
                             {
-                                grid[r][c] = 0; // Remove meteor
+                                grid[r][c] = 0; // Remove meteor (goes off screen)
                             }
                             else
                             {
                                 grid[r][c] = 0; // Clear current position
-                                // Move down if next cell is empty or contains another meteor
+                                // Attempt to move meteor down one row
+                                // Can move if next cell is empty or has another meteor
                                 if (grid[r + 1][c] == 0 || grid[r + 1][c] == 2)
                                 {
-                                    grid[r + 1][c] = 2;
+                                    grid[r + 1][c] = 2;  // Place meteor in new position
                                 }
-                                // Collision with Spaceship
+                                // Collision with Spaceship: Meteor hits player
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    // Check if player has shield
+                                    // Check if player has active shield
                                     if (hasShield)
                                     {
-                                        hasShield = false; // Shield absorbs the hit
+                                        hasShield = false; // Shield absorbs hit and deactivates
                                     }
-                                    else if (!isInvincible)
+                                    else if (!isInvincible)  // Only damage if not in invincibility period
                                     {
-                                        lives--;
-                                        damageSound.play();
-                                        isInvincible = true;
-                                        invincibilityTimer.restart();
-                                        // Check for Game Over
+                                        lives--;  // Lose one life
+                                        damageSound.play();  // Play damage sound
+                                        isInvincible = true;  // Activate temporary invincibility
+                                        invincibilityTimer.restart();  // Start invincibility timer
+                                        // Check if player has lost all lives
                                         if (lives <= 0)
                                         {
-                                            // Update high score if current score is higher
-                                            if (score > highScore)
+                                            // Game Over: Save high score and clear saved game
+                                            if (score > highScore)  // New high score achieved
                                             {
-                                                highScore = score;
+                                                highScore = score;  // Update high score
                                                 ofstream outputFile(saveFile);
                                                 if (outputFile.is_open())
                                                 {
+                                                    // Save format: "highScore 0 0 0" (clear saved game data)
+                                                    outputFile << highScore << " 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;  // No saved game now
+                                                }
+                                            }
+                                            else  // Didn't beat high score
+                                            {
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    // Keep existing high score, clear saved game
                                                     outputFile << highScore << " 0 0 0";
                                                     outputFile.close();
                                                     hasSavedGame = false;
                                                 }
                                             }
-                                            else
-                                            {
-                                                ofstream outputFile(saveFile);
-                                                if (outputFile.is_open())
-                                                {
-                                                    outputFile << highScore << " 0 0 0";
-                                                    outputFile.close();
-                                                    hasSavedGame = false;
-                                                }
-                                            }
-                                            loseSound.play();
-                                            currentState = STATE_GAME_OVER;
-                                            selectedMenuItem = 0;
+                                            loseSound.play();  // Play game over sound
+                                            currentState = STATE_GAME_OVER;  // Switch to game over screen
+                                            selectedMenuItem = 0;  // Default to first option
                                         }
                                     }
-                                    grid[r + 1][c] = 0; // Remove meteor
+                                    grid[r + 1][c] = 0; // Remove meteor from grid
                                 }
-                                // Collision with Player Bullet
+                                // Collision with Player Bullet: Meteor destroyed for points
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    int meteorPoints = 1 + (rand() % 2); // Random 1 or 2 points
-                                    score += meteorPoints;
-                                    explosionSound.play();
+                                    int meteorPoints = 1 + (rand() % 2); // Random 1-2 points per meteor
+                                    score += meteorPoints;  // Add points to score
+                                    explosionSound.play();  // Play explosion sound
                                     grid[r + 1][c] = 0; // Destroy both meteor and bullet
-                                    // Trigger hit effect
+                                    // Create visual explosion effect at collision location
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r + 1;
+                                            hitEffectRow[i] = r + 1;     // Position of explosion
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
-                                            break;
+                                            hitEffectTimer[i] = 0.0f;    // Start effect timer
+                                            hitEffectActive[i] = true;   // Activate effect
+                                            break;  // Only need one effect per collision
                                         }
                                     }
                                 }
@@ -1141,254 +1311,270 @@ int main()
                 meteorMoveClock.restart();
             }
 
-            // Shield Powerup Movement Logic (Random zigzag movement, separate from main grid)
+            // Shield Powerup Movement Logic: Move powerups down (tracked separately from main grid)
+            // Powerups move slower than other entities (0.5 seconds per cell)
             if (shieldPowerupMoveClock.getElapsedTime().asSeconds() >= 0.5f)
             {
+                // Process all active shield powerups
                 for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
                 {
-                    if (shieldPowerupActive[i])
+                    if (shieldPowerupActive[i])  // Skip inactive slots
                     {
-                        // Check if powerup reached the bottom
+                        // Check if powerup has reached the bottom edge
                         if (shieldPowerupRow[i] >= ROWS - 1)
                         {
-                            shieldPowerupActive[i] = false;
-                            continue;
+                            shieldPowerupActive[i] = false;  // Deactivate (fell off screen)
+                            continue;  // Skip to next powerup
                         }
 
                         // Check collision with spaceship BEFORE moving
+                        // (Powerup position might already overlap spaceship)
                         if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
                         {
-                            hasShield = true;
-                            levelUpSound.play(); // Use level up sound for powerup collection
-                            shieldPowerupActive[i] = false;
-                            continue;
+                            hasShield = true;  // Activate player's shield
+                            levelUpSound.play(); // Play collection sound (reuses level up sound)
+                            shieldPowerupActive[i] = false;  // Remove powerup
+                            continue;  // Skip movement for this powerup
                         }
 
-                        // Move down (straight, no horizontal movement)
+                        // Move powerup down one row (straight down, no zigzag)
                         shieldPowerupRow[i]++;
 
                         // Check collision with spaceship AFTER moving
+                        // (Player might now be at powerup's new position)
                         if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
                         {
-                            hasShield = true;
-                            levelUpSound.play(); // Use level up sound for powerup collection
-                            shieldPowerupActive[i] = false;
+                            hasShield = true;  // Grant shield to player
+                            levelUpSound.play(); // Sound feedback
+                            shieldPowerupActive[i] = false;  // Remove collected powerup
                         }
                     }
                 }
-                shieldPowerupMoveClock.restart();
+                shieldPowerupMoveClock.restart();  // Reset movement timer
             }
 
-            // Enemy Movement Logic (Speed increases with level)
-            float enemyMoveSpeed = 0.833f - ((level - 1) * 0.1f);
+            // Enemy Movement Logic: Move all enemies downward with level-based speed
+            // Enemies move faster at higher levels (same speed curve as meteors)
+            float enemyMoveSpeed = 0.833f - ((level - 1) * 0.1f);  // Calculate speed based on level
+            // Only move enemies if enough time has passed
             if (enemyMoveClock.getElapsedTime().asSeconds() >= enemyMoveSpeed)
             {
-                // Iterate from bottom to top
+                // Iterate from bottom to top (prevents processing same enemy twice)
                 for (int r = ROWS - 1; r >= 0; r--)
                 {
                     for (int c = 0; c < COLS; c++)
                     {
                         if (grid[r][c] == 4)
-                        { // Found an enemy
-                            // Check if enemy reached the bottom (Player loses a life)
+                        { // Found an enemy UFO
+                            // Check if enemy reached bottom edge (escaped)
                             if (r == ROWS - 1)
                             {
-                                grid[r][c] = 0; // Remove enemy
-                                lives--;        // Penalty for letting enemy escape
-                                damageSound.play();
-                                isInvincible = true;
-                                invincibilityTimer.restart();
-                                // Check for Game Over
+                                grid[r][c] = 0; // Remove enemy from grid
+                                lives--;        // Player loses life as penalty for letting enemy escape
+                                damageSound.play();  // Play damage sound
+                                isInvincible = true;  // Grant temporary invincibility
+                                invincibilityTimer.restart();  // Start invincibility timer
+                                // Check if player has lost all lives
                                 if (lives <= 0)
                                 {
-                                    // Update high score if current score is higher
-                                    if (score > highScore)
+                                    // Game Over: Save high score and clear saved game
+                                    if (score > highScore)  // Check for new high score
                                     {
-                                        highScore = score;
+                                        highScore = score;  // Update high score
                                         ofstream outputFile(saveFile);
                                         if (outputFile.is_open())
                                         {
+                                            // Save new high score, clear saved game data
                                             outputFile << highScore << " 0 0 0";
                                             outputFile.close();
                                             hasSavedGame = false;
                                         }
                                     }
-                                    else
+                                    else  // Didn't beat high score
                                     {
                                         ofstream outputFile(saveFile);
                                         if (outputFile.is_open())
                                         {
+                                            // Keep existing high score
                                             outputFile << highScore << " 0 0 0";
                                             outputFile.close();
                                             hasSavedGame = false;
                                         }
                                     }
-                                    loseSound.play();
-                                    currentState = STATE_GAME_OVER;
-                                    selectedMenuItem = 0;
+                                    loseSound.play();  // Play game over sound
+                                    currentState = STATE_GAME_OVER;  // Switch to game over screen
+                                    selectedMenuItem = 0;  // Default selection
                                 }
                             }
-                            else
+                            else  // Enemy not at bottom - continue moving
                             {
-                                grid[r][c] = 0; // Clear current position
-                                // Move down if next cell is empty or contains another enemy
+                                grid[r][c] = 0; // Clear current enemy position
+                                // Move down if next cell is empty or has another enemy
                                 if (grid[r + 1][c] == 0 || grid[r + 1][c] == 4)
                                 {
-                                    grid[r + 1][c] = 4;
+                                    grid[r + 1][c] = 4;  // Place enemy in new position
                                 }
-                                // Collision with Spaceship
+                                // Collision with Spaceship: Enemy crashes into player
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    // Check if player has shield
+                                    // Check if player has active shield
                                     if (hasShield)
                                     {
-                                        hasShield = false; // Shield absorbs the hit
-                                        explosionSound.play();
+                                        hasShield = false; // Shield absorbs the hit and deactivates
+                                        explosionSound.play();  // Play explosion sound
                                     }
-                                    else if (!isInvincible)
+                                    else if (!isInvincible)  // Only damage if not in invincibility period
                                     {
-                                        lives--;
-                                        damageSound.play();
-                                        isInvincible = true;
-                                        invincibilityTimer.restart();
-                                        // Check for Game Over
+                                        lives--;  // Lose one life
+                                        damageSound.play();  // Play damage sound
+                                        isInvincible = true;  // Activate invincibility
+                                        invincibilityTimer.restart();  // Start invincibility timer
+                                        // Check if player has lost all lives
                                         if (lives <= 0)
                                         {
-                                            // Update high score if current score is higher
-                                            if (score > highScore)
+                                            // Game Over: Save high score
+                                            if (score > highScore)  // New high score
                                             {
                                                 highScore = score;
                                                 ofstream outputFile(saveFile);
                                                 if (outputFile.is_open())
                                                 {
+                                                    // Save new high score, clear saved game
                                                     outputFile << highScore << " 0 0 0 0";
                                                     outputFile.close();
                                                     hasSavedGame = false;
                                                 }
                                             }
-                                            else
+                                            else  // Didn't beat high score
                                             {
                                                 ofstream outputFile(saveFile);
                                                 if (outputFile.is_open())
                                                 {
+                                                    // Keep existing high score
                                                     outputFile << highScore << " 0 0 0 0";
                                                     outputFile.close();
                                                     hasSavedGame = false;
                                                 }
                                             }
-                                            loseSound.play();
-                                            currentState = STATE_GAME_OVER;
+                                            loseSound.play();  // Game over sound
+                                            currentState = STATE_GAME_OVER;  // Switch to game over screen
                                             selectedMenuItem = 0;
                                         }
                                     }
-                                    grid[r + 1][c] = 0; // Remove enemy
+                                    grid[r + 1][c] = 0; // Remove enemy from grid
                                 }
-                                // Collision with Player Bullet
+                                // Collision with Player Bullet: Enemy destroyed
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    score += 3; // Award 3 points for enemy
-                                    killCount++; // Increment kill counter
-                                    explosionSound.play();
-                                    grid[r + 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    score += 3;  // Award 3 points for destroying enemy
+                                    killCount++; // Increment kill counter (used for level progression)
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r + 1][c] = 0; // Destroy both enemy and bullet
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r + 1;
+                                            hitEffectRow[i] = r + 1;     // Explosion position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start effect timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
-                                    // Check for Level Up Condition (based on kills, not score)
-                                    int killsNeeded = level * 10;
-                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
+                                    // Check for Level Up: Need 10 kills per level (10, 20, 30, 40, 50)
+                                    int killsNeeded = level * 10;  // Calculate kills required for next level
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)  // Ready to level up  // Ready to level up
                                     {
-                                        level++;
-                                        levelUpSound.play();
-                                        killCount = 0;       // Reset kill counter for next level
-                                        bossMoveCounter = 0; // Reset boss firing counter
-                                        // Clear grid of all entities
+                                        level++;  // Advance to next level
+                                        levelUpSound.play();  // Play level up sound
+                                        killCount = 0;       // Reset kill counter for new level
+                                        bossMoveCounter = 0; // Reset boss firing mechanics
+                                        // Clear all entities from grid (except spaceship)
+                                        // This gives player a brief respite before next level
                                         for (int r = 0; r < ROWS; r++)
                                         {
                                             for (int c = 0; c < COLS; c++)
                                             {
+                                                // Remove meteors(2), bullets(3), enemies(4), bosses(5), boss bullets(6)
                                                 if (grid[r][c] >= 2 && grid[r][c] <= 6)
                                                 {
-                                                    grid[r][c] = 0;
+                                                    grid[r][c] = 0;  // Clear entity
                                                 }
                                             }
                                         }
-                                        // Reset spaceship position
-                                        grid[ROWS - 1][spaceshipCol] = 0;
-                                        spaceshipCol = COLS / 2;
-                                        grid[ROWS - 1][spaceshipCol] = 1;
-                                        // Transition to Level Up State
+                                        // Reset spaceship to center starting position
+                                        grid[ROWS - 1][spaceshipCol] = 0;  // Clear old position
+                                        spaceshipCol = COLS / 2;            // Move to center
+                                        grid[ROWS - 1][spaceshipCol] = 1;  // Mark new position
+                                        // Transition to Level Up State (brief 2-second display)
                                         currentState = STATE_LEVEL_UP;
-                                        levelUpTimer.restart();
-                                        levelUpBlinkClock.restart();
+                                        levelUpTimer.restart();       // Start level up display timer
+                                        levelUpBlinkClock.restart();  // Start blink animation
                                     }
-                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)  // Victory!
                                     {
-                                        // Victory Condition Met
-                                        // Update high score if current score is higher
-                                        if (score > highScore)
+                                        // Victory Condition: Player completed level 5 with required kills
+                                        // Save high score and clear saved game
+                                        if (score > highScore)  // New high score achieved
                                         {
                                             highScore = score;
                                             ofstream outputFile(saveFile);
                                             if (outputFile.is_open())
                                             {
+                                                // Save new high score, no saved game
                                                 outputFile << highScore << " 0 0 0";
                                                 outputFile.close();
                                                 hasSavedGame = false;
                                             }
                                         }
-                                        else
+                                        else  // Didn't beat high score
                                         {
                                             ofstream outputFile(saveFile);
                                             if (outputFile.is_open())
                                             {
+                                                // Keep existing high score
                                                 outputFile << highScore << " 0 0 0";
                                                 outputFile.close();
                                                 hasSavedGame = false;
                                             }
                                         }
-                                        winSound.play();
-                                        currentState = STATE_VICTORY;
-                                        selectedMenuItem = 0;
+                                        winSound.play();  // Play victory sound
+                                        currentState = STATE_VICTORY;  // Switch to victory screen
+                                        selectedMenuItem = 0;  // Default menu selection
                                     }
                                 }
                             }
                         }
                     }
                 }
-                enemyMoveClock.restart();
+                enemyMoveClock.restart();  // Reset enemy movement timer
             }
 
-            // Boss Movement Logic (Speed increases with level)
-            float bossMoveSpeed = 0.8f - ((level - 3) * 0.1f);
-            if (bossMoveSpeed < 0.5f)
+            // Boss Movement Logic: Move all bosses downward with level-based speed
+            // Bosses move slightly slower than regular enemies but can shoot
+            float bossMoveSpeed = 0.8f - ((level - 3) * 0.1f);  // Speed increases from level 3 onward
+            if (bossMoveSpeed < 0.5f)  // Cap minimum speed (maximum difficulty)
                 bossMoveSpeed = 0.5f;
+            // Only move bosses if enough time has passed
             if (bossMoveClock.getElapsedTime().asSeconds() >= bossMoveSpeed)
             {
-                // Iterate from bottom to top
+                // Iterate from bottom to top (prevents double-processing)
                 for (int r = ROWS - 1; r >= 0; r--)
                 {
                     for (int c = 0; c < COLS; c++)
                     {
                         if (grid[r][c] == 5)
-                        { // Found a boss
-                            // Check if boss reached the bottom (Player loses a life)
+                        { // Found a boss enemy
+                            // Check if boss reached bottom edge (escaped)
                             if (r == ROWS - 1)
                             {
-                                grid[r][c] = 0; // Remove boss
-                                lives--;        // Penalty
-                                damageSound.play();
-                                isInvincible = true;
-                                invincibilityTimer.restart();
-                                // Check for Game Over
+                                grid[r][c] = 0; // Remove boss from grid
+                                lives--;        // Player loses life as penalty
+                                damageSound.play();  // Play damage sound
+                                isInvincible = true;  // Grant invincibility
+                                invincibilityTimer.restart();  // Start invincibility timer
+                                // Check if player has lost all lives
                                 if (lives <= 0)
                                 {
                                     // Update high score if current score is higher
@@ -1418,34 +1604,35 @@ int main()
                                     selectedMenuItem = 0;
                                 }
                             }
-                            else
+                            else  // Boss not at bottom - continue moving
                             {
-                                int nextRow = r + 1;
-                                int nextCell = grid[nextRow][c];
+                                int nextRow = r + 1;  // Calculate next row
+                                int nextCell = grid[nextRow][c];  // Check what's in next cell
 
-                                grid[r][c] = 0; // Clear current position
+                                grid[r][c] = 0; // Clear boss from current position
 
-                                // Move down if next cell is empty or contains other enemies/projectiles
+                                // Move down if next cell allows it
+                                // Boss can move through empty(0), other bosses(5), boss bullets(6), meteors(2), enemies(4)
                                 if (nextCell == 0 || nextCell == 5 || nextCell == 6 || nextCell == 2 || nextCell == 4)
                                 {
-                                    grid[nextRow][c] = 5;
+                                    grid[nextRow][c] = 5;  // Place boss in new position
                                 }
-                                // Collision with Spaceship
+                                // Collision with Spaceship: Boss crashes into player
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    // Check if player has shield
+                                    // Check if player has active shield
                                     if (hasShield)
                                     {
-                                        hasShield = false; // Shield absorbs the hit
-                                        explosionSound.play();
+                                        hasShield = false; // Shield absorbs hit and deactivates
+                                        explosionSound.play();  // Play explosion sound
                                     }
-                                    else if (!isInvincible)
+                                    else if (!isInvincible)  // Only damage if not invincible
                                     {
-                                        lives--;
-                                        damageSound.play();
-                                        isInvincible = true;
-                                        invincibilityTimer.restart();
-                                        // Check for Game Over
+                                        lives--;  // Lose one life
+                                        damageSound.play();  // Play damage sound
+                                        isInvincible = true;  // Activate invincibility
+                                        invincibilityTimer.restart();  // Start timer
+                                        // Check if player has lost all lives
                                         if (lives <= 0)
                                         {
                                             // Update high score if current score is higher
@@ -1477,58 +1664,59 @@ int main()
                                     }
                                     grid[r + 1][c] = 0; // Remove boss
                                 }
-                                // Collision with Player Bullet
+                                // Collision with Player Bullet: Boss destroyed (worth more points)
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    score += 5; // Award 5 points for boss
+                                    score += 5;  // Award 5 points for destroying boss (more than enemy)
                                     killCount++; // Increment kill counter
-                                    explosionSound.play();
-                                    grid[r + 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r + 1][c] = 0; // Destroy both boss and bullet
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r + 1;
+                                            hitEffectRow[i] = r + 1;     // Explosion position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
-                                    // Check for Level Up Condition (based on kills)
+                                    // Check for Level Up (need 10 kills per level)
                                     int killsNeeded = level * 10;
                                     if (level < MAX_LEVEL && killCount >= killsNeeded)
                                     {
-                                        level++;
-                                        levelUpSound.play();
-                                        killCount = 0;
-                                        bossMoveCounter = 0;
-                                        // Clear grid
+                                        level++;  // Advance to next level
+                                        levelUpSound.play();  // Play level up sound
+                                        killCount = 0;         // Reset kill counter
+                                        bossMoveCounter = 0;   // Reset boss mechanics
+                                        // Clear all entities from grid
                                         for (int r = 0; r < ROWS; r++)
                                         {
                                             for (int c = 0; c < COLS; c++)
                                             {
+                                                // Remove all entities except spaceship
                                                 if (grid[r][c] >= 2 && grid[r][c] <= 6)
                                                 {
                                                     grid[r][c] = 0;
                                                 }
                                             }
                                         }
-                                        // Reset spaceship
+                                        // Reset spaceship to center
                                         grid[ROWS - 1][spaceshipCol] = 0;
                                         spaceshipCol = COLS / 2;
                                         grid[ROWS - 1][spaceshipCol] = 1;
-                                        // Transition to Level Up
+                                        // Transition to Level Up screen
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
                                     }
-                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)  // Victory!
                                     {
-                                        // Victory Condition
-                                        winSound.play();
-                                        currentState = STATE_VICTORY;
+                                        // Victory Condition: Completed level 5
+                                        winSound.play();  // Play victory sound
+                                        currentState = STATE_VICTORY;  // Switch to victory screen
                                         selectedMenuItem = 0;
                                     }
                                 }
@@ -1537,175 +1725,186 @@ int main()
                     }
                 }
 
-                // Boss Firing Logic
-                bossMoveCounter++;
+                // Boss Firing Logic: Bosses periodically shoot bullets downward
+                // Firing frequency increases with level (more dangerous at higher levels)
+                bossMoveCounter++;  // Increment movement counter
 
-                // Determine firing frequency based on level (slower intervals)
+                // Determine how often bosses fire based on current level
                 float firingInterval;
                 if (level == 3)
                 {
-                    firingInterval = 5; // Fire every 5th movement
+                    firingInterval = 5; // Level 3: Fire every 5 movements (slowest)
                 }
                 else if (level == 4)
                 {
-                    firingInterval = 4; // Fire every 4th movement
+                    firingInterval = 4; // Level 4: Fire every 4 movements (moderate)
                 }
                 else
                 {                       // Level 5
-                    firingInterval = 3; // Fire every 3rd movement
+                    firingInterval = 3; // Level 5: Fire every 3 movements (fastest)
                 }
 
-                // Execute Boss Firing
+                // Execute Boss Firing: If counter reaches interval, all bosses fire
                 if (bossMoveCounter >= firingInterval)
                 {
+                    // Scan grid for all bosses and make them fire
                     for (int r = 0; r < ROWS; r++)
                     {
                         for (int c = 0; c < COLS; c++)
                         {
                             if (grid[r][c] == 5)
                             { // Found a boss
-                                // Fire bullet downwards
-                                if (r < ROWS - 1)
+                                // Fire bullet downward if possible
+                                if (r < ROWS - 1)  // Not at bottom row
                                 {
-                                    int bulletRow = r + 1;
+                                    int bulletRow = r + 1;  // Row below boss
+                                    // Only fire if cell below is empty
                                     if (bulletRow < ROWS && grid[bulletRow][c] == 0)
                                     {
-                                        grid[bulletRow][c] = 6; // 6 represents boss bullet
+                                        grid[bulletRow][c] = 6; // Grid value 6 = boss bullet
                                     }
                                 }
                             }
                         }
                     }
-                    bossMoveCounter = 0; // Reset counter
+                    bossMoveCounter = 0; // Reset counter for next firing cycle
                 }
 
-                bossMoveClock.restart();
+                bossMoveClock.restart();  // Reset boss movement timer
             }
 
-            // Boss Bullet Movement Logic (Moves faster than other entities)
-            float bossBulletSpeed = 0.15f; // Fast constant speed regardless of level
+            // Boss Bullet Movement Logic: Move boss bullets downward very fast
+            // Boss bullets move much faster than other entities (constant fast speed)
+            float bossBulletSpeed = 0.15f; // Move every 0.15 seconds (very fast, regardless of level)
             if (bossBulletMoveClock.getElapsedTime().asSeconds() >= bossBulletSpeed)
             {
-                // Iterate from bottom to top
+                // Iterate from bottom to top (prevents double-processing)
                 for (int r = ROWS - 1; r >= 0; r--)
                 {
                     for (int c = 0; c < COLS; c++)
                     {
                         if (grid[r][c] == 6)
-                        { // Found a boss bullet
-                            // Check if bullet reached the bottom
+                        { // Found a boss bullet (enemy projectile)
+                            // Check if bullet reached bottom edge
                             if (r == ROWS - 1)
                             {
-                                grid[r][c] = 0; // Remove bullet
+                                grid[r][c] = 0; // Remove bullet (goes off screen)
                             }
-                            else
+                            else  // Bullet not at bottom - continue moving
                             {
                                 grid[r][c] = 0; // Clear current position
-                                // Collision with Spaceship
+                                // Collision with Spaceship: Boss bullet hits player
                                 if (grid[r + 1][c] == 1)
                                 {
-                                    // Check if player has shield
+                                    // Check if player has active shield
                                     if (hasShield)
                                     {
-                                        hasShield = false; // Shield absorbs the hit
-                                        explosionSound.play();
+                                        hasShield = false; // Shield absorbs hit and deactivates
+                                        explosionSound.play();  // Play explosion sound
                                     }
-                                    else if (!isInvincible)
+                                    else if (!isInvincible)  // Only damage if not invincible
                                     {
-                                        lives--;
-                                        damageSound.play();
-                                        isInvincible = true;
-                                        invincibilityTimer.restart();
-                                        // Check for Game Over
+                                        lives--;  // Lose one life
+                                        damageSound.play();  // Play damage sound
+                                        isInvincible = true;  // Activate invincibility
+                                        invincibilityTimer.restart();  // Start timer
+                                        // Check if player has lost all lives
                                         if (lives <= 0)
                                         {
-                                            // Update high score if current score is higher
-                                            if (score > highScore)
+                                            // Game Over: Save high score
+                                            if (score > highScore)  // New high score
                                             {
                                                 highScore = score;
                                                 ofstream outputFile(saveFile);
                                                 if (outputFile.is_open())
                                                 {
+                                                    // Save new high score, clear saved game
                                                     outputFile << highScore << " 0 0 0 0";
                                                     outputFile.close();
                                                     hasSavedGame = false;
                                                 }
                                             }
-                                            else
+                                            else  // Didn't beat high score
                                             {
                                                 ofstream outputFile(saveFile);
                                                 if (outputFile.is_open())
                                                 {
+                                                    // Keep existing high score
                                                     outputFile << highScore << " 0 0 0 0";
                                                     outputFile.close();
                                                     hasSavedGame = false;
                                                 }
                                             }
-                                            loseSound.play();
-                                            currentState = STATE_GAME_OVER;
+                                            loseSound.play();  // Game over sound
+                                            currentState = STATE_GAME_OVER;  // Switch to game over screen
                                             selectedMenuItem = 0;
                                         }
                                     }
-                                    // Trigger hit effect
+                                    // Create visual hit effect at collision location
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r + 1;
+                                            hitEffectRow[i] = r + 1;     // Effect position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
                                 }
-                                // Pass through other enemies/meteors
+                                // Boss bullet passes through meteors and enemies (doesn't destroy them)
+                                // This makes boss bullets more dangerous (harder to block)
                                 else if (grid[r + 1][c] == 2 || grid[r + 1][c] == 4)
                                 {
-                                    grid[r + 1][c] = 6; // Bullet continues, entity stays
+                                    grid[r + 1][c] = 6; // Bullet continues through, entity remains
                                 }
-                                // Move to empty space or overwrite another boss bullet
+                                // Move to empty space or stack with another boss bullet
                                 else if (grid[r + 1][c] == 0 || grid[r + 1][c] == 6)
                                 {
-                                    grid[r + 1][c] = 6;
+                                    grid[r + 1][c] = 6;  // Move bullet down
                                 }
                             }
                         }
                     }
                 }
-                bossBulletMoveClock.restart();
+                bossBulletMoveClock.restart();  // Reset bullet movement timer
             }
 
-            // Player Bullet Movement Logic (Moves up)
+            // Player Bullet Movement Logic: Move player bullets upward very fast
+            // Bullets move much faster than enemies (0.05 seconds per cell)
             if (bulletMoveClock.getElapsedTime().asSeconds() >= 0.05f)
             {
-                // Iterate from top to bottom to avoid overwriting
+                // Iterate from top to bottom (prevents processing same bullet twice)
+                // Since bullets move UP, we process top rows first
                 for (int r = 0; r < ROWS; r++)
                 {
                     for (int c = 0; c < COLS; c++)
                     {
                         if (grid[r][c] == 3)
                         { // Found a player bullet
-                            // Check if bullet reached the top
+                            // Check if bullet reached top edge
                             if (r == 0)
                             {
-                                grid[r][c] = 0; // Remove bullet
+                                grid[r][c] = 0; // Remove bullet (goes off screen)
                             }
-                            else
+                            else  // Bullet not at top - continue moving upward
                             {
                                 grid[r][c] = 0; // Clear current position
-                                // Move up if next cell is empty, contains another bullet, or has shield powerup (pass through)
+                                // Move up if next cell allows it
+                                // Can move through empty(0), other bullets(3), or shield powerup(7)
                                 if (grid[r - 1][c] == 0 || grid[r - 1][c] == 3 || grid[r - 1][c] == 7)
                                 {
-                                    if (grid[r - 1][c] != 7) // Only overwrite if not shield powerup
-                                        grid[r - 1][c] = 3;
+                                    // Don't overwrite shield powerup (let bullet pass through)
+                                    if (grid[r - 1][c] != 7)
+                                        grid[r - 1][c] = 3;  // Move bullet up
                                 }
-                                // Collision with Boss Bullet
+                                // Collision with Boss Bullet: Bullets destroy each other
                                 else if (grid[r - 1][c] == 6)
                                 {
-                                    explosionSound.play();
-                                    grid[r - 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r - 1][c] = 0; // Destroy both bullets
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
                                         if (!hitEffectActive[i])
@@ -1718,226 +1917,231 @@ int main()
                                         }
                                     }
                                 }
-                                // Collision with Meteor
+                                // Collision with Meteor: Player bullet destroys meteor for points
                                 else if (grid[r - 1][c] == 2)
                                 {
-                                    int meteorPoints = 1 + (rand() % 2); // Random 1 or 2 points
-                                    score += meteorPoints;
-                                    explosionSound.play();
-                                    grid[r - 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    int meteorPoints = 1 + (rand() % 2); // Random 1-2 points per meteor
+                                    score += meteorPoints;  // Add points to score
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r - 1][c] = 0; // Destroy both meteor and bullet
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r - 1;
+                                            hitEffectRow[i] = r - 1;     // Explosion position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
                                 }
-                                // Collision with Enemy
+                                // Collision with Enemy: Player bullet destroys enemy
                                 else if (grid[r - 1][c] == 4)
                                 {
-                                    score += 3; // Award 3 points
-                                    killCount++; // Increment kill counter
-                                    explosionSound.play();
-                                    grid[r - 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    score += 3;  // Award 3 points for destroying enemy
+                                    killCount++; // Increment kill counter (progress toward level up)
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r - 1][c] = 0; // Destroy both enemy and bullet
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r - 1;
+                                            hitEffectRow[i] = r - 1;     // Explosion position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
-                                    // Check for Level Up
-                                    int killsNeeded = level * 10;
-                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
+                                    // Check for Level Up: Need 10 kills per level
+                                    int killsNeeded = level * 10;  // Calculate required kills
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)  // Ready to level up  // Ready to level up
                                     {
-                                        level++;
-                                        levelUpSound.play();
-                                        killCount = 0;
-                                        bossMoveCounter = 0;
-                                        // Clear grid
+                                        level++;  // Advance to next level
+                                        levelUpSound.play();  // Play level up sound
+                                        killCount = 0;         // Reset kill counter for new level
+                                        bossMoveCounter = 0;   // Reset boss mechanics
+                                        // Clear all entities from grid (give player a break)
                                         for (int r = 0; r < ROWS; r++)
                                         {
                                             for (int c = 0; c < COLS; c++)
                                             {
+                                                // Remove all entities except spaceship
                                                 if (grid[r][c] >= 2 && grid[r][c] <= 6)
                                                 {
-                                                    grid[r][c] = 0;
+                                                    grid[r][c] = 0;  // Clear entity
                                                 }
                                             }
                                         }
-                                        // Reset spaceship
-                                        grid[ROWS - 1][spaceshipCol] = 0;
-                                        spaceshipCol = COLS / 2;
-                                        grid[ROWS - 1][spaceshipCol] = 1;
-                                        // Transition to Level Up
+                                        // Reset spaceship to center position
+                                        grid[ROWS - 1][spaceshipCol] = 0;  // Clear old position
+                                        spaceshipCol = COLS / 2;            // Move to center
+                                        grid[ROWS - 1][spaceshipCol] = 1;  // Mark new position
+                                        // Transition to Level Up screen (brief 2-second display)
                                         currentState = STATE_LEVEL_UP;
-                                        levelUpTimer.restart();
-                                        levelUpBlinkClock.restart();
+                                        levelUpTimer.restart();       // Start display timer
+                                        levelUpBlinkClock.restart();  // Start blink animation
                                     }
-                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)  // Victory!
                                     {
-                                        // Victory Condition
-                                        // Update high score if current score is higher
-                                        if (score > highScore)
+                                        // Victory Condition: Completed level 5 with required kills
+                                        // Save high score and clear saved game
+                                        if (score > highScore)  // New high score
                                         {
                                             highScore = score;
                                             ofstream outputFile(saveFile);
                                             if (outputFile.is_open())
                                             {
-                                                outputFile << highScore << " 0 0 0 0"; // Clear saved game
-                                                outputFile.close();
-                                                hasSavedGame = false;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            // Clear saved game on victory
-                                            ofstream outputFile(saveFile);
-                                            if (outputFile.is_open())
-                                            {
+                                                // Save new high score, clear saved game
                                                 outputFile << highScore << " 0 0 0 0";
                                                 outputFile.close();
                                                 hasSavedGame = false;
                                             }
                                         }
-                                        winSound.play();
-                                        currentState = STATE_VICTORY;
-                                        selectedMenuItem = 0;
+                                        else  // Didn't beat high score
+                                        {
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                // Keep existing high score, clear saved game
+                                                outputFile << highScore << " 0 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        winSound.play();  // Play victory sound
+                                        currentState = STATE_VICTORY;  // Switch to victory screen
+                                        selectedMenuItem = 0;  // Default menu selection
                                     }
                                 }
-                                // Collision with Boss
+                                // Collision with Boss: Player bullet destroys boss (worth more points)
                                 else if (grid[r - 1][c] == 5)
                                 {
-                                    score += 5; // Award 5 points
+                                    score += 5;  // Award 5 points for destroying boss (more valuable)
                                     killCount++; // Increment kill counter
-                                    explosionSound.play();
-                                    grid[r - 1][c] = 0; // Destroy both
-                                    // Trigger hit effect
+                                    explosionSound.play();  // Play explosion sound
+                                    grid[r - 1][c] = 0; // Destroy both boss and bullet
+                                    // Create visual explosion effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
                                     {
-                                        if (!hitEffectActive[i])
+                                        if (!hitEffectActive[i])  // Find available effect slot
                                         {
-                                            hitEffectRow[i] = r - 1;
+                                            hitEffectRow[i] = r - 1;     // Explosion position
                                             hitEffectCol[i] = c;
-                                            hitEffectTimer[i] = 0.0f;
-                                            hitEffectActive[i] = true;
+                                            hitEffectTimer[i] = 0.0f;    // Start timer
+                                            hitEffectActive[i] = true;   // Activate effect
                                             break;
                                         }
                                     }
-                                    // Check for Level Up
-                                    int killsNeeded = level * 10;
-                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
+                                    // Check for Level Up: Need 10 kills per level
+                                    int killsNeeded = level * 10;  // Calculate required kills
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)  // Ready to level up  // Ready to level up
                                     {
-                                        level++;
-                                        levelUpSound.play();
-                                        killCount = 0;
-                                        bossMoveCounter = 0;
-                                        // Clear grid
+                                        level++;  // Advance to next level
+                                        levelUpSound.play();  // Play level up sound
+                                        killCount = 0;         // Reset kill counter
+                                        bossMoveCounter = 0;   // Reset boss mechanics
+                                        // Clear all entities from grid
                                         for (int r = 0; r < ROWS; r++)
                                         {
                                             for (int c = 0; c < COLS; c++)
                                             {
+                                                // Remove all entities except spaceship
                                                 if (grid[r][c] >= 2 && grid[r][c] <= 6)
                                                 {
-                                                    grid[r][c] = 0;
+                                                    grid[r][c] = 0;  // Clear entity
                                                 }
                                             }
                                         }
-                                        // Reset spaceship
+                                        // Reset spaceship to center
                                         grid[ROWS - 1][spaceshipCol] = 0;
                                         spaceshipCol = COLS / 2;
                                         grid[ROWS - 1][spaceshipCol] = 1;
-                                        // Transition to Level Up
+                                        // Transition to Level Up screen
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
                                     }
-                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)  // Victory!
                                     {
-                                        // Victory Condition
-                                        // Update high score if current score is higher
-                                        if (score > highScore)
+                                        // Victory Condition: Completed level 5
+                                        // Save high score and clear saved game
+                                        if (score > highScore)  // New high score
                                         {
                                             highScore = score;
                                             ofstream outputFile(saveFile);
                                             if (outputFile.is_open())
                                             {
-                                                outputFile << highScore << " 0 0 0"; // Clear saved game
-                                                outputFile.close();
-                                                hasSavedGame = false;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            // Clear saved game on victory
-                                            ofstream outputFile(saveFile);
-                                            if (outputFile.is_open())
-                                            {
+                                                // Save new high score, no saved game
                                                 outputFile << highScore << " 0 0 0";
                                                 outputFile.close();
                                                 hasSavedGame = false;
                                             }
                                         }
-                                        winSound.play();
-                                        currentState = STATE_VICTORY;
-                                        selectedMenuItem = 0;
+                                        else  // Didn't beat high score
+                                        {
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                // Keep existing high score
+                                                outputFile << highScore << " 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        winSound.play();  // Play victory sound
+                                        currentState = STATE_VICTORY;  // Switch to victory screen
+                                        selectedMenuItem = 0;  // Default selection
                                     }
                                 }
                             }
                         }
                     }
                 }
-                bulletMoveClock.restart();
+                bulletMoveClock.restart();  // Reset bullet movement timer
             }
 
-            // Update Hit Effects (Remove after duration)
-            float deltaTime = hitEffectClock.getElapsedTime().asSeconds();
-            for (int i = 0; i < MAX_HIT_EFFECTS; i++)
+            // Update Hit Effects: Manage explosion animation timers
+            float deltaTime = hitEffectClock.getElapsedTime().asSeconds();  // Time since last update
+            for (int i = 0; i < MAX_HIT_EFFECTS; i++)  // Check all 50 possible effects
             {
-                if (hitEffectActive[i])
+                if (hitEffectActive[i])  // If this explosion is currently visible
                 {
-                    hitEffectTimer[i] += deltaTime;
-                    if (hitEffectTimer[i] >= HIT_EFFECT_DURATION)
+                    hitEffectTimer[i] += deltaTime;  // Increment timer
+                    if (hitEffectTimer[i] >= HIT_EFFECT_DURATION)  // Lasted 0.3 seconds
                     {
-                        hitEffectActive[i] = false; // Deactivate
+                        hitEffectActive[i] = false; // Remove explosion from display
                     }
                 }
             }
-            hitEffectClock.restart();
+            hitEffectClock.restart();  // Reset clock for next frame
 
-            // Update Invincibility Status
-            if (isInvincible && invincibilityTimer.getElapsedTime().asSeconds() >= INVINCIBILITY_DURATION)
+            // Update Invincibility Status: Player is invincible for 1 second after taking damage
+            if (isInvincible && invincibilityTimer.getElapsedTime().asSeconds() >= INVINCIBILITY_DURATION)  // 1 second passed
             {
-                isInvincible = false;
+                isInvincible = false;  // Remove invincibility protection
             }
 
         } // End of PLAYING state
 
-        // Level Up State Logic
+        // Level Up State Logic: Brief 2-second display before returning to gameplay
         else if (currentState == STATE_LEVEL_UP)
         {
-            // Blink effect for "LEVEL UP" text
+            // Create blinking animation for "LEVEL UP" text (toggles every 0.3 seconds)
             if (levelUpBlinkClock.getElapsedTime().asSeconds() >= 0.3f)
             {
-                levelUpBlinkState = !levelUpBlinkState;
-                levelUpBlinkClock.restart();
+                levelUpBlinkState = !levelUpBlinkState;  // Toggle visibility
+                levelUpBlinkClock.restart();  // Reset blink timer
             }
 
-            // Return to gameplay after 2 seconds
+            // Automatically return to gameplay after 2 seconds
             if (levelUpTimer.getElapsedTime().asSeconds() >= 2.0f)
             {
-                currentState = STATE_PLAYING;
+                currentState = STATE_PLAYING;  // Resume game
+                // Restart all game clocks (fresh start for new level)
                 meteorSpawnClock.restart();
                 meteorMoveClock.restart();
                 enemySpawnClock.restart();
@@ -1950,32 +2154,36 @@ int main()
             }
         }
 
-        // Victory State Logic
+        // Victory State Logic: Player completed level 5, show victory screen
         else if (currentState == STATE_VICTORY)
         {
-            // Victory menu navigation
-            if (menuClock.getElapsedTime() >= menuCooldown)
+            // Victory menu navigation: Two options (Restart Game, Main Menu)
+            if (menuClock.getElapsedTime() >= menuCooldown)  // Cooldown prevents accidental inputs
             {
-                bool menuAction = false;
+                bool menuAction = false;  // Track if user pressed a key
 
+                // Move selection up (wrap around from top to bottom)
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
-                    selectedMenuItem = (selectedMenuItem - 1 + 2) % 2;
-                    menuNavSound.play();
+                    selectedMenuItem = (selectedMenuItem - 1 + 2) % 2;  // Cycle through 2 options
+                    menuNavSound.play();  // Play navigation sound
                     menuAction = true;
                 }
+                // Move selection down (wrap around from bottom to top)
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
-                    selectedMenuItem = (selectedMenuItem + 1) % 2;
-                    menuNavSound.play();
+                    selectedMenuItem = (selectedMenuItem + 1) % 2;  // Cycle through 2 options
+                    menuNavSound.play();  // Play navigation sound
                     menuAction = true;
                 }
+                // Confirm selection with Enter key
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
-                    menuClickSound.play();
-                    if (selectedMenuItem == 0)
-                    { // Restart Game
-                        currentState = STATE_PLAYING;
+                    menuClickSound.play();  // Play selection sound
+                    if (selectedMenuItem == 0)  // Option 1: Restart Game (play again from level 1)
+                    {
+                        currentState = STATE_PLAYING;  // Start playing
+                        // Reset all game variables to initial state
                         lives = 3;
                         score = 0;
                         killCount = 0;
@@ -1983,15 +2191,18 @@ int main()
                         bossMoveCounter = 0;
                         isInvincible = false;
                         hasShield = false;
+                        // Clear entire grid
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
                             {
-                                grid[r][c] = 0;
+                                grid[r][c] = 0;  // Empty cell
                             }
                         }
+                        // Place spaceship in center of bottom row
                         spaceshipCol = COLS / 2;
                         grid[ROWS - 1][spaceshipCol] = 1;
+                        // Restart all game clocks
                         meteorSpawnClock.restart();
                         meteorMoveClock.restart();
                         enemySpawnClock.restart();
@@ -2003,14 +2214,14 @@ int main()
                         shieldPowerupSpawnClock.restart();
                         shieldPowerupMoveClock.restart();
                     }
-                    else if (selectedMenuItem == 1)
-                    { // Main Menu
-                        if (bgMusic.getStatus() != Music::Playing)
+                    else if (selectedMenuItem == 1)  // Option 2: Return to Main Menu
+                    {
+                        if (bgMusic.getStatus() != Music::Playing)  // Resume music if stopped
                         {
                             bgMusic.play();
                         }
-                        currentState = STATE_MENU;
-                        selectedMenuItem = 0;
+                        currentState = STATE_MENU;  // Return to menu
+                        selectedMenuItem = 0;  // Reset menu selection
                     }
                     menuAction = true;
                 }
@@ -2022,50 +2233,56 @@ int main()
             }
         }
 
-        // Pause State Logic
+        // Pause State Logic: Game is paused, player can resume, restart, or save & quit
         else if (currentState == STATE_PAUSED)
         {
-            // Pause menu navigation
-            if (menuClock.getElapsedTime() >= menuCooldown)
+            // Pause menu navigation: Three options (Resume, Restart Level, Save & Quit)
+            if (menuClock.getElapsedTime() >= menuCooldown)  // Prevent accidental inputs
             {
-                bool menuAction = false;
+                bool menuAction = false;  // Track key presses
 
+                // Move selection up (wrap around from top to bottom)
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
-                    selectedMenuItem = (selectedMenuItem - 1 + 3) % 3;
-                    menuNavSound.play();
+                    selectedMenuItem = (selectedMenuItem - 1 + 3) % 3;  // Cycle through 3 options
+                    menuNavSound.play();  // Play navigation sound
                     menuAction = true;
                 }
+                // Move selection down (wrap around from bottom to top)
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
-                    selectedMenuItem = (selectedMenuItem + 1) % 3;
-                    menuNavSound.play();
+                    selectedMenuItem = (selectedMenuItem + 1) % 3;  // Cycle through 3 options
+                    menuNavSound.play();  // Play navigation sound
                     menuAction = true;
                 }
+                // Confirm selection with Enter key
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
-                    menuClickSound.play();
-                    if (selectedMenuItem == 0)
-                    { // Resume Game
-                        currentState = STATE_PLAYING;
+                    menuClickSound.play();  // Play selection sound
+                    if (selectedMenuItem == 0)  // Option 1: Resume Game (continue where left off)
+                    {
+                        currentState = STATE_PLAYING;  // Return to gameplay immediately
                     }
-                    else if (selectedMenuItem == 1)
-                    { // Restart Level (Keep level/lives, reset score and kills)
-                        currentState = STATE_PLAYING;
+                    else if (selectedMenuItem == 1)  // Option 2: Restart Level (keep level/lives, reset score)
+                    {
+                        currentState = STATE_PLAYING;  // Start playing
+                        // Reset score and kill counter (keep current level and lives)
                         score = 0;
                         killCount = 0;
                         bossMoveCounter = 0;
                         isInvincible = false;
-                        // Clear grid but keep spaceship
+                        // Clear all entities from grid
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
                             {
-                                grid[r][c] = 0;
+                                grid[r][c] = 0;  // Empty cell
                             }
                         }
+                        // Place spaceship in center
                         spaceshipCol = COLS / 2;
                         grid[ROWS - 1][spaceshipCol] = 1;
+                        // Restart all game clocks
                         meteorSpawnClock.restart();
                         meteorMoveClock.restart();
                         enemySpawnClock.restart();
@@ -2077,31 +2294,34 @@ int main()
                         shieldPowerupSpawnClock.restart();
                         shieldPowerupMoveClock.restart();
                     }
-                    else if (selectedMenuItem == 2)
-                    { // Save and Quit to Main Menu
-                        // Save current game state (no killCount)
+                    else if (selectedMenuItem == 2)  // Option 3: Save & Quit to Main Menu
+                    {
+                        // Save current game state to file (format: "highScore lives score level")
                         ofstream outputFile(saveFile);
                         if (outputFile.is_open())
                         {
                             outputFile << highScore << " " << lives << " " << score << " " << level;
                             outputFile.close();
+                            // Update saved game tracking variables
                             hasSavedGame = true;
                             savedLives = lives;
                             savedScore = score;
                             savedLevel = level;
                         }
+                        // Resume background music if stopped
                         if (bgMusic.getStatus() != Music::Playing)
                         {
                             bgMusic.play();
                         }
-                        currentState = STATE_MENU;
-                        selectedMenuItem = 0;
+                        currentState = STATE_MENU;  // Return to main menu
+                        selectedMenuItem = 0;  // Reset selection
                     }
                     menuAction = true;
                 }
+                // Quick resume with P key (same key used to pause)
                 else if (Keyboard::isKeyPressed(Keyboard::P))
-                { // P to resume
-                    currentState = STATE_PLAYING;
+                {
+                    currentState = STATE_PLAYING;  // Resume gameplay
                     menuAction = true;
                 }
 
@@ -2112,381 +2332,410 @@ int main()
             }
         }
 
-        // Rendering Section: Draw everything to the window
-        window.clear(Color(40, 40, 40)); // Clear with dark gray background
+        // ========== RENDERING SECTION: Draw all visuals to the window ==========
+        window.clear(Color(40, 40, 40)); // Clear screen with dark gray background
 
+        // Main Menu Screen: Show title, options, and high score
         if (currentState == STATE_MENU)
         {
-            // Draw Main Menu
-            window.draw(menuBackground);
-            window.draw(menuTitle);
+            // Draw background image and title
+            window.draw(menuBackground);  // Background image
+            window.draw(menuTitle);       // "SPACE SHOOTER" title
 
-            // Update and draw high score
+            // Update and display high score (centered on screen)
             char menuHighScoreBuffer[50];
-            sprintf(menuHighScoreBuffer, "High Score: %d", highScore);
+            sprintf(menuHighScoreBuffer, "High Score: %d", highScore);  // Format score
             menuHighScoreText.setString(menuHighScoreBuffer);
+            // Center horizontally at y=180
             menuHighScoreText.setPosition(windowWidth / 2 - menuHighScoreText.getLocalBounds().width / 2.0f, 180);
             window.draw(menuHighScoreText);
 
+            // Draw all menu options (4 options: New Game, Continue, Instructions, Exit)
             for (int i = 0; i < 4; i++)
             {
+                // Highlight selected option in yellow, others in white
                 if (i == selectedMenuItem)
                 {
-                    menuItems[i].setFillColor(Color::Yellow);
+                    menuItems[i].setFillColor(Color::Yellow);  // Selected
                 }
                 else
                 {
-                    menuItems[i].setFillColor(Color::White);
+                    menuItems[i].setFillColor(Color::White);   // Not selected
                 }
-                window.draw(menuItems[i]);
+                window.draw(menuItems[i]);  // Draw option text
             }
-            window.draw(menuInstructions);
+            window.draw(menuInstructions);  // Draw "Press Enter to select" text
         }
+        // Instructions Screen: Show controls, entity descriptions, and game objectives
         else if (currentState == STATE_INSTRUCTIONS)
         {
-            // Draw Instructions Screen
-            window.draw(menuBackground);
-            window.draw(instructionsTitle);
+            // Draw background and title
+            window.draw(menuBackground);      // Background image
+            window.draw(instructionsTitle);   // "HOW TO PLAY" title
 
-            // Draw controls
-            window.draw(controlsTitle);
-            window.draw(moveText);
-            window.draw(shootText);
-            window.draw(pauseText);
+            // Section 1: Controls (keyboard inputs)
+            window.draw(controlsTitle);  // "CONTROLS:" header
+            window.draw(moveText);       // Movement keys (Left/Right/A/D)
+            window.draw(shootText);      // Shoot key (Space)
+            window.draw(pauseText);      // Pause key (P)
 
-            // Draw entities
-            window.draw(entitiesTitle);
+            // Section 2: Entity Descriptions (show each sprite with explanation)
+            window.draw(entitiesTitle);  // "ENTITIES:" header
 
-            // Player sprite
+            // Player spaceship sprite and description
             spaceship.setPosition(60, 285);
             window.draw(spaceship);
-            window.draw(playerDesc);
+            window.draw(playerDesc);  // "Player - Your spaceship"
 
-            // Meteor sprite
+            // Meteor sprite and description
             meteor.setPosition(60, 325);
             window.draw(meteor);
-            window.draw(meteorDesc);
+            window.draw(meteorDesc);  // "Meteor - Worth 1-2 points"
 
-            // Enemy sprite
+            // Enemy sprite and description
             enemy.setPosition(60, 365);
             window.draw(enemy);
-            window.draw(enemyDesc);
+            window.draw(enemyDesc);  // "Enemy - Worth 3 points"
 
-            // Boss sprite
+            // Boss sprite and description
             bossEnemy.setPosition(60, 405);
             window.draw(bossEnemy);
-            window.draw(bossDesc);
+            window.draw(bossDesc);  // "Boss - Worth 5 points, shoots bullets"
 
-            // Player bullet sprite
+            // Player bullet sprite and description
             bullet.setPosition(60 + BULLET_OFFSET_X, 445);
             window.draw(bullet);
-            window.draw(bulletDesc);
+            window.draw(bulletDesc);  // "Player Bullet - Your projectile"
 
-            // Boss bullet sprite
+            // Boss bullet sprite and description
             bossBullet.setPosition(60 + BULLET_OFFSET_X, 485);
             window.draw(bossBullet);
-            window.draw(bossBulletDesc);
+            window.draw(bossBulletDesc);  // "Boss Bullet - Avoid or shoot"
 
-            // Life icon
+            // Life icon and description
             lifeIcon.setPosition(60 + 8, 525);
             window.draw(lifeIcon);
-            window.draw(lifeDesc);
+            window.draw(lifeDesc);  // "Life - You have 3 lives"
 
-            // Shield powerup sprite
+            // Shield powerup sprite and description
             shieldPowerUp.setPosition(60, 565);
             window.draw(shieldPowerUp);
-            window.draw(shieldPowerupDesc);
+            window.draw(shieldPowerupDesc);  // "Shield - Protects from 1 hit"
 
-            // Draw game systems section
-            window.draw(systemsTitle);
-            window.draw(livesDesc);
-            window.draw(levelsDesc);
-            window.draw(highScoreDesc);
+            // Section 3: Game Systems (lives, levels, high score)
+            window.draw(systemsTitle);   // "GAME SYSTEMS:" header
+            window.draw(livesDesc);      // Lives explanation
+            window.draw(levelsDesc);     // Level progression explanation
+            window.draw(highScoreDesc);  // High score saving explanation
 
-            // Draw objectives
-            window.draw(objectiveTitle);
-            window.draw(objective1);
-            window.draw(objective2);
-            window.draw(objective3);
-            window.draw(objective4);
+            // Section 4: Objectives (win conditions)
+            window.draw(objectiveTitle);  // "OBJECTIVES:" header
+            window.draw(objective1);      // Destroy enemies
+            window.draw(objective2);      // Survive
+            window.draw(objective3);      // Level up every 10 kills
+            window.draw(objective4);      // Beat level 5 to win
 
-            // Draw back instruction
-            window.draw(instructionsBack);
+            // Navigation hint
+            window.draw(instructionsBack);  // "Press ESC to return"
         }
+        // Gameplay Screen: Draw all game entities, UI, and effects
         else if (currentState == STATE_PLAYING)
         {
-            // Draw Gameplay Screen
-            window.draw(background);
-            window.draw(gameBox);
+            // Draw background and game border
+            window.draw(background);  // Space background image
+            window.draw(gameBox);     // White border around play area
 
-            // Draw Grid Entities (Meteors, Bullets, Spaceship, Enemies)
+            // Draw all entities from the grid (23 rows x 15 columns)
             for (int r = 0; r < ROWS; r++)
             {
                 for (int c = 0; c < COLS; c++)
                 {
+                    // Value 1 = Player Spaceship (bottom row, controlled by player)
                     if (grid[r][c] == 1)
-                    { // Spaceship
+                    {
                         spaceship.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
-                        // Blink effect during invincibility
+                        // Blink effect during invincibility (flash every 100ms)
                         if (!isInvincible || ((int)(invincibilityTimer.getElapsedTime().asMilliseconds() / 100) % 2 == 0))
                         {
-                            window.draw(spaceship);
+                            window.draw(spaceship);  // Draw if visible this frame
                         }
                     }
+                    // Value 2 = Meteor (falls down, destroys on contact)
                     else if (grid[r][c] == 2)
-                    { // Meteor
+                    {
                         meteor.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(meteor);
                     }
+                    // Value 3 = Player Bullet (shoots upward)
                     else if (grid[r][c] == 3)
-                    { // Player Bullet
+                    {
                         bullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
-                        window.draw(bullet);
+                        window.draw(bullet);  // Offset for visual centering
                     }
+                    // Value 4 = Enemy (moves down, worth 3 points)
                     else if (grid[r][c] == 4)
-                    { // Enemy
+                    {
                         enemy.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(enemy);
                     }
+                    // Value 5 = Boss (moves left/right, shoots bullets, worth 5 points)
                     else if (grid[r][c] == 5)
-                    { // Boss
+                    {
                         bossEnemy.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(bossEnemy);
                     }
+                    // Value 6 = Boss Bullet (shoots downward from boss)
                     else if (grid[r][c] == 6)
-                    { // Boss Bullet
+                    {
                         bossBullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
-                        window.draw(bossBullet);
+                        window.draw(bossBullet);  // Offset for visual centering
                     }
                 }
             }
 
-            // Draw shield powerups from separate array
+            // Draw shield powerups from separate tracking array (not in grid)
+            // Maximum 10 shield powerups can be active simultaneously
             for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
             {
-                if (shieldPowerupActive[i])
+                if (shieldPowerupActive[i])  // If this powerup exists
                 {
+                    // Position shield sprite at its grid location
                     shieldPowerUp.setPosition(MARGIN + shieldPowerupCol[i] * CELL_SIZE, MARGIN + shieldPowerupRow[i] * CELL_SIZE);
                     window.draw(shieldPowerUp);
                 }
             }
 
-            // Draw Shield over spaceship if active
-            if (hasShield)
+            // Draw Shield icon over spaceship if player has shield protection
+            if (hasShield)  // Player collected a shield powerup
             {
-                // Center shield over spaceship position
+                // Center shield icon over spaceship position (bottom row)
                 shieldIcon.setPosition(MARGIN + spaceshipCol * CELL_SIZE + SHIELD_OFFSET, MARGIN + (ROWS - 1) * CELL_SIZE + SHIELD_OFFSET);
-                window.draw(shieldIcon);
+                window.draw(shieldIcon);  // Visual indicator of protection
             }
 
-            // Draw Active Hit Effects
+            // Draw all active explosion effects (max 50 simultaneous)
             for (int i = 0; i < MAX_HIT_EFFECTS; i++)
             {
-                if (hitEffectActive[i])
+                if (hitEffectActive[i])  // If explosion is visible
                 {
+                    // Position explosion sprite at collision location
                     bulletHit.setPosition(MARGIN + hitEffectCol[i] * CELL_SIZE, MARGIN + hitEffectRow[i] * CELL_SIZE);
-                    window.draw(bulletHit);
+                    window.draw(bulletHit);  // Draw explosion (lasts 0.3 seconds)
                 }
             }
 
-            // Draw UI: Lives
-            livesText.setString("Lives:");
+            // UI Section: Lives display (text + icons)
+            livesText.setString("Lives:");  // Label
 
-            // Draw life icons
-            float lifeIconStartX = livesText.getPosition().x + livesText.getLocalBounds().width + 10;
-            float lifeIconY = livesText.getPosition().y + (livesText.getLocalBounds().height / 2.0f) - 12;
+            // Draw individual life icons (heart sprites) for remaining lives
+            float lifeIconStartX = livesText.getPosition().x + livesText.getLocalBounds().width + 10;  // Start after "Lives:" text
+            float lifeIconY = livesText.getPosition().y + (livesText.getLocalBounds().height / 2.0f) - 12;  // Vertically center
 
+            // Draw one icon for each remaining life
             for (int i = 0; i < lives; i++)
             {
-                lifeIcon.setPosition(lifeIconStartX + (i * 28), lifeIconY);
+                lifeIcon.setPosition(lifeIconStartX + (i * 28), lifeIconY);  // Space icons 28px apart
                 window.draw(lifeIcon);
             }
 
-            // Draw UI: Score
+            // UI Section: Current score (updates constantly)
             char scoreBuffer[20];
-            sprintf(scoreBuffer, "Score: %d", score);
+            sprintf(scoreBuffer, "Score: %d", score);  // Format score
             scoreText.setString(scoreBuffer);
 
-            // Draw UI: Kills
+            // UI Section: Kill counter and progress (e.g., "Kills: 7/10")
             char killsBuffer[50];
-            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);
+            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);  // Show progress toward level up
             killsText.setString(killsBuffer);
 
-            // Draw UI: Level
+            // UI Section: Current level (1-5)
             char levelBuffer[20];
             sprintf(levelBuffer, "Level: %d", level);
             levelText.setString(levelBuffer);
 
-            // Draw UI: High Score
+            // UI Section: High score (best score ever achieved)
             char highScoreBuffer[50];
             sprintf(highScoreBuffer, "High Score: %d", highScore);
             highScoreText.setString(highScoreBuffer);
 
-            // Render UI elements
-            window.draw(title);
-            window.draw(livesText);
-            window.draw(scoreText);
-            window.draw(killsText);
-            window.draw(levelText);
-            window.draw(highScoreText);
+            // Draw all UI text elements to screen
+            window.draw(title);          // "SPACE SHOOTER" title
+            window.draw(livesText);      // Lives label
+            window.draw(scoreText);      // Current score
+            window.draw(killsText);      // Kill progress
+            window.draw(levelText);      // Current level
+            window.draw(highScoreText);  // High score
         }
+        // Level Up Screen: Brief 2-second display when advancing to next level
         else if (currentState == STATE_LEVEL_UP)
         {
-            // Draw Level Up Screen
-            window.draw(background);
-            window.draw(gameBox);
+            // Draw background and border
+            window.draw(background);  // Space background
+            window.draw(gameBox);     // Game border
 
-            // Draw spaceship
+            // Draw player's spaceship (centered, all other entities cleared)
             spaceship.setPosition(MARGIN + spaceshipCol * CELL_SIZE, MARGIN + (ROWS - 1) * CELL_SIZE);
             window.draw(spaceship);
 
-            // Draw blinking text
-            if (levelUpBlinkState)
+            // Draw blinking "LEVEL UP!" text (toggles every 0.3 seconds)
+            if (levelUpBlinkState)  // Only visible when blink state is true
             {
-                window.draw(levelUpText);
+                window.draw(levelUpText);  // Large centered text
             }
 
-            // Show updated level info
+            // Update and show new level number
             char levelBuffer[20];
-            sprintf(levelBuffer, "Level: %d", level);
+            sprintf(levelBuffer, "Level: %d", level);  // Show advanced level
             levelText.setString(levelBuffer);
 
+            // Update and show reset kill counter (starts at 0 for new level)
             char killsBuffer[50];
-            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);
+            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);  // "0/10", "0/20", etc.
             killsText.setString(killsBuffer);
 
+            // Draw UI elements (same as gameplay screen)
             window.draw(title);
             window.draw(livesText);
             window.draw(scoreText);
             window.draw(killsText);
             window.draw(levelText);
         }
+        // Pause Screen: Show frozen game state with darkened overlay and menu
         else if (currentState == STATE_PAUSED)
         {
-            // Draw Pause Screen (Overlay on top of game)
+            // Draw background and border (same as gameplay)
             window.draw(background);
             window.draw(gameBox);
 
-            // Draw game state in background
+            // Draw frozen game state (all entities remain visible but unmoving)
             for (int r = 0; r < ROWS; r++)
             {
                 for (int c = 0; c < COLS; c++)
                 {
-                    if (grid[r][c] == 1)
-                    { // Spaceship
+                    // Draw each entity type at its current position
+                    if (grid[r][c] == 1)  // Spaceship
+                    {
                         spaceship.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(spaceship);
                     }
-                    else if (grid[r][c] == 2)
-                    { // Meteor
+                    else if (grid[r][c] == 2)  // Meteor
+                    {
                         meteor.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(meteor);
                     }
-                    else if (grid[r][c] == 3)
-                    { // Bullet
+                    else if (grid[r][c] == 3)  // Player Bullet
+                    {
                         bullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bullet);
                     }
-                    else if (grid[r][c] == 4)
-                    { // Enemy
+                    else if (grid[r][c] == 4)  // Enemy
+                    {
                         enemy.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(enemy);
                     }
-                    else if (grid[r][c] == 5)
-                    { // Boss
+                    else if (grid[r][c] == 5)  // Boss
+                    {
                         bossEnemy.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
                         window.draw(bossEnemy);
                     }
-                    else if (grid[r][c] == 6)
-                    { // Boss Bullet
+                    else if (grid[r][c] == 6)  // Boss Bullet
+                    {
                         bossBullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bossBullet);
                     }
                 }
             }
 
-            // Draw semi-transparent overlay
-            RectangleShape overlay(Vector2f(COLS * CELL_SIZE, ROWS * CELL_SIZE));
-            overlay.setPosition(MARGIN, MARGIN);
-            overlay.setFillColor(Color(0, 0, 0, 150)); // Semi-transparent black
-            window.draw(overlay);
+            // Create semi-transparent dark overlay to dim background game state
+            RectangleShape overlay(Vector2f(COLS * CELL_SIZE, ROWS * CELL_SIZE));  // Cover play area
+            overlay.setPosition(MARGIN, MARGIN);  // Position over game grid
+            overlay.setFillColor(Color(0, 0, 0, 150)); // Semi-transparent black (alpha=150)
+            window.draw(overlay);  // Darken background to highlight menu
 
-            // Draw pause menu
-            window.draw(pauseTitle);
+            // Draw pause menu on top of overlay
+            window.draw(pauseTitle);  // "PAUSED" title text
+            // Draw 3 menu options (Resume, Restart Level, Save & Quit)
             for (int i = 0; i < 3; i++)
             {
+                // Highlight selected option in yellow, others in white
                 if (i == selectedMenuItem)
                 {
-                    pauseItems[i].setFillColor(Color::Yellow);
+                    pauseItems[i].setFillColor(Color::Yellow);  // Selected
                 }
                 else
                 {
-                    pauseItems[i].setFillColor(Color::White);
+                    pauseItems[i].setFillColor(Color::White);   // Not selected
                 }
-                window.draw(pauseItems[i]);
+                window.draw(pauseItems[i]);  // Draw option text
             }
         }
+        // Victory Screen: Player completed level 5 and won the game
         else if (currentState == STATE_VICTORY)
         {
-            // Draw Victory Screen
-            window.draw(menuBackground);
-            window.draw(victoryTitle);
+            // Draw background and victory title
+            window.draw(menuBackground);  // Background image
+            window.draw(victoryTitle);    // "VICTORY!" title
 
-            // Update and draw score
+            // Update and display final score (centered on screen)
             char victoryScoreBuffer[50];
-            sprintf(victoryScoreBuffer, "Final Score: %d", score);
+            sprintf(victoryScoreBuffer, "Final Score: %d", score);  // Format final score
             victoryScore.setString(victoryScoreBuffer);
+            // Center horizontally at y=200
             victoryScore.setPosition(windowWidth / 2 - victoryScore.getLocalBounds().width / 2.0f, 200);
             window.draw(victoryScore);
 
-            // Draw menu items
+            // Draw victory menu options (2 options: Restart Game, Main Menu)
             for (int i = 0; i < 2; i++)
             {
+                // Highlight selected option in yellow, others in white
                 if (i == selectedMenuItem)
                 {
-                    victoryItems[i].setFillColor(Color::Yellow);
+                    victoryItems[i].setFillColor(Color::Yellow);  // Selected
                 }
                 else
                 {
-                    victoryItems[i].setFillColor(Color::White);
+                    victoryItems[i].setFillColor(Color::White);   // Not selected
                 }
-                window.draw(victoryItems[i]);
+                window.draw(victoryItems[i]);  // Draw option text
             }
 
-            window.draw(victoryInstructions);
+            window.draw(victoryInstructions);  // "Press Enter to select" text
         }
+        // Game Over Screen: Player lost all 3 lives
         else if (currentState == STATE_GAME_OVER)
         {
-            // Draw Game Over Screen
-            window.draw(menuBackground);
-            window.draw(gameOverTitle);
+            // Draw background and game over title
+            window.draw(menuBackground);  // Background image
+            window.draw(gameOverTitle);   // "GAME OVER" title
 
-            // Update and draw score
+            // Update and display final score (centered on screen)
             char gameOverScoreBuffer[50];
-            sprintf(gameOverScoreBuffer, "Final Score: %d", score);
+            sprintf(gameOverScoreBuffer, "Final Score: %d", score);  // Format final score
             gameOverScore.setString(gameOverScoreBuffer);
+            // Center horizontally at y=200
             gameOverScore.setPosition(windowWidth / 2 - gameOverScore.getLocalBounds().width / 2.0f, 200);
             window.draw(gameOverScore);
 
-            // Draw menu items
+            // Draw game over menu options (2 options: Restart Game, Main Menu)
             for (int i = 0; i < 2; i++)
             {
+                // Highlight selected option in yellow, others in white
                 if (i == selectedMenuItem)
                 {
-                    gameOverItems[i].setFillColor(Color::Yellow);
+                    gameOverItems[i].setFillColor(Color::Yellow);  // Selected
                 }
                 else
                 {
-                    gameOverItems[i].setFillColor(Color::White);
+                    gameOverItems[i].setFillColor(Color::White);   // Not selected
                 }
-                window.draw(gameOverItems[i]);
+                window.draw(gameOverItems[i]);  // Draw option text
             }
 
-            window.draw(gameOverInstructions);
+            window.draw(gameOverInstructions);  // "Press Enter to select" text
         }
 
-        window.display();
-    }
+        window.display();  // Display everything drawn this frame to the screen
+    }  // End of main game loop (continues until window is closed)
 
-    return 0;
-}
+    return 0;  // Program exits successfully
+}  // End of main function
