@@ -33,7 +33,9 @@ The game uses a **monolithic procedural architecture** where all code resides in
 
 ```cpp
 #include <SFML/Graphics.hpp>  // Core SFML graphics library
-#include <iostream>            // For console output (debugging)
+#include <SFML/Audio.hpp>     // SFML audio library for sound effects and music
+#include <iostream>            // For error output (cerr)
+#include <fstream>             // For file I/O (save file handling)
 #include <cstdlib>             // For rand() and srand()
 #include <ctime>               // For time() to seed random generator
 using namespace std;           // Standard library namespace
@@ -42,7 +44,9 @@ using namespace sf;            // SFML namespace
 
 **Why these includes:**
 - `SFML/Graphics.hpp`: Provides window management, rendering, textures, sprites, text, and input handling
-- `iostream`: Used for `cout` statements to debug game events in the console
+- `SFML/Audio.hpp`: Provides music and sound effect playback capabilities
+- `iostream`: Used for `cerr` statements to report critical errors (texture/sound loading failures)
+- `fstream`: Used for reading and writing save-file.txt (high score and game state persistence)
 - `cstdlib` & `ctime`: Random number generation for spawning entities at unpredictable positions
 
 ---
@@ -55,12 +59,16 @@ const int ROWS = 23;        // Vertical grid cells
 const int COLS = 15;        // Horizontal grid cells
 const int CELL_SIZE = 40;   // Each cell is 40x40 pixels
 const int MARGIN = 40;      // Border around the game grid
+const float BULLET_OFFSET_X = (CELL_SIZE - CELL_SIZE * 0.3f) / 2.0f; // Center bullets horizontally
+const float SHIELD_OFFSET = CELL_SIZE * -0.15f; // Center shield overlay
 ```
 
 **How they connect:**
 - Window size is calculated as: `COLS * CELL_SIZE + MARGIN * 2 + 500` (width), `ROWS * CELL_SIZE + MARGIN * 2` (height)
 - Every entity position is mapped: `pixelX = MARGIN + col * CELL_SIZE`
 - The grid acts as a coordinate system: `grid[row][col]`
+- `BULLET_OFFSET_X`: Pre-calculated offset to center bullets (width 30% of cell) in their cells
+- `SHIELD_OFFSET`: Pre-calculated offset to center shield overlay (130% of cell size) over spaceship
 
 ### Game States
 ```cpp
@@ -88,14 +96,33 @@ STATE_GAME_OVER or STATE_VICTORY → back to STATE_MENU
 
 ## 4. The main() Function Deep Dive
 
-### Phase 1: Initialization (Lines 19-21)
+### Phase 0: Save File System (Lines 38-70)
+```cpp
+string saveFile = "save-file.txt";
+ifstream inputFile(saveFile);
+if (inputFile.is_open()) {
+    inputFile >> highScore >> savedLives >> savedScore >> savedLevel;
+    if (savedLevel > 0 && savedLives > 0) {
+        hasSavedGame = true;
+    }
+}
+```
+**Purpose**: Persistent data storage for high scores and saved games
+**File Format**: Space-separated integers: `highScore lives score level`
+**Features**:
+- Loads high score on startup to display in main menu
+- Detects if a valid saved game exists (level > 0, lives > 0)
+- Creates file with "0 0 0 0" if it doesn't exist
+- Enables "Load Saved Game" menu option when save data exists
+
+### Phase 1: Initialization (Lines 28-30)
 ```cpp
 srand(static_cast<unsigned int>(time(0)));
 ```
 **Purpose**: Seeds the random number generator with the current timestamp
 **Impact**: Ensures meteor/enemy spawn positions are different each game session
 
-### Phase 2: Window Creation (Lines 23-26)
+### Phase 2: Window Creation (Lines 32-37)
 ```cpp
 const int windowWidth = COLS * CELL_SIZE + MARGIN * 2 + 500;
 const int windowHeight = ROWS * CELL_SIZE + MARGIN * 2;
@@ -106,15 +133,22 @@ window.setFramerateLimit(60);
 **Breakdown:**
 - `windowWidth`: Grid area (600px) + margins (80px) + UI panel (500px) = 1180px
 - `windowHeight`: Grid area (920px) + margins (80px) = 1000px
-- `setFramerateLimit(60)`: Caps execution to 60 iterations/second for consistent gameplay
+- `setFramerateLimit(60)`: Caps execution to 60 FPS for consistent gameplay (removed conflicting sleep() call for optimal performance)
 
 ---
 
 ## 5. Core Data Structures
 
-### The Grid System (Lines 49-51)
+### The Grid System (Lines 91-104)
 ```cpp
 int grid[ROWS][COLS] = {0};
+
+// Separate arrays for shield powerups (independent from main grid)
+const int MAX_SHIELD_POWERUPS = 5;
+int shieldPowerupRow[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
+int shieldPowerupCol[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
+bool shieldPowerupActive[MAX_SHIELD_POWERUPS] = {false, false, false, false, false};
+int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0};
 ```
 
 **This is the heart of the game.** Every entity exists as an integer value in this 2D array:
@@ -123,16 +157,23 @@ int grid[ROWS][COLS] = {0};
 |-------|-------------|----------|
 | 0 | Empty Space | No rendering, movement passes through |
 | 1 | Player Ship | Controlled by user, bottom row only |
-| 2 | Meteor | Falls down, destroys on contact |
-| 3 | Player Bullet | Moves up, destroys enemies |
-| 4 | Enemy UFO | Falls down, awards 1 point |
-| 5 | Boss | Falls down, fires bullets, awards 3 points |
+| 2 | Meteor | Falls down, destroys on contact, awards 1-2 random points |
+| 3 | Player Bullet | Moves up, destroys enemies/meteors |
+| 4 | Enemy UFO | Falls down, awards 3 points when destroyed |
+| 5 | Boss | Falls down, fires bullets, awards 5 points when destroyed |
 | 6 | Boss Bullet | Falls down, damages player |
 
-**Critical Design Decision:**
-- Only ONE entity per cell (no overlapping)
+**Critical Design Decisions:**
+- Only ONE entity per cell in main grid (no overlapping)
+- Shield powerups use separate array system to avoid interfering with bullets/entities
 - Collision detection is simply checking the value of the target cell
 - Movement = changing the value at one position and setting the old position to 0
+
+**Shield Powerup System:**
+- Independent tracking allows up to 5 simultaneous shield powerups
+- Random zigzag movement (direction: -1=left, 0=down, 1=right)
+- Collision detected by checking grid position before/after movement
+- Spawns starting at level 3+
 
 ### Hit Effect System (Lines 53-58)
 ```cpp
@@ -153,24 +194,36 @@ bool hitEffectActive[MAX_HIT_EFFECTS] = {false};
 
 **Linked to**: Rendering loop (lines 1655-1661) and update logic (lines 1352-1363)
 
-### Game State Variables (Lines 28-46)
+### Game State Variables (Lines 71-90)
 ```cpp
 int currentState = STATE_MENU;    // Controls which screen is active
 int selectedMenuItem = 0;         // Which menu option is highlighted
 int lives = 3;                    // Player health
-int score = 0;                    // Points accumulated
+int score = 0;                    // Points accumulated from all sources
+int killCount = 0;                // Tracks enemies/bosses destroyed for level progression
 int level = 1;                    // Current difficulty tier
 const int MAX_LEVEL = 5;          // Win condition
 bool isInvincible = false;        // Temporary damage immunity
 Clock invincibilityTimer;         // Tracks immunity duration
 int bossMoveCounter = 0;          // Determines when bosses fire
+bool hasShield = false;           // Shield powerup status
+int highScore = 0;                // Persistent high score from save file
+bool hasSavedGame = false;        // Whether saved game data exists
 ```
+
+**New Scoring System:**
+- **Enemies**: 3 points each (contribute to killCount)
+- **Bosses**: 5 points each (contribute to killCount)
+- **Meteors**: 1-2 random points (bonus only, no killCount)
+- **Level Up Condition**: `killCount >= level * 10` (must destroy 10/20/30/40/50 enemies/bosses per level)
 
 **How they interact:**
 - `currentState` determines which logic block executes in the game loop
 - `lives <= 0` triggers `currentState = STATE_GAME_OVER`
-- `score >= level * 10` triggers level up sequence
+- `killCount >= level * 10` triggers level up sequence (changed from score-based)
 - `isInvincible` prevents multiple hits during the 1-second immunity window
+- `hasShield` provides one-time damage absorption before being removed
+- `highScore` persists across game sessions via save-file.txt
 
 ---
 
@@ -306,7 +359,7 @@ if (meteorSpawnClock.getElapsedTime().asSeconds() >= nextSpawnTime) {
 
 ## 9. The Game Loop
 
-### Structure (Lines 440-1850)
+### Structure (Lines ~640-2487)
 ```cpp
 while (window.isOpen()) {
     // 1. EVENT POLLING
@@ -327,8 +380,6 @@ while (window.isOpen()) {
     else if (currentState == STATE_PLAYING) { /* draw game */ }
     // ... other renders
     window.display();
-    
-    sleep(milliseconds(50));  // Small delay for game speed
 }
 ```
 
@@ -337,7 +388,8 @@ while (window.isOpen()) {
 2. **Update Logic**: Based on `currentState`, execute appropriate game logic
 3. **Rendering**: Draw everything relevant to current state
 4. **Display**: Swap buffers (show what was drawn)
-5. **Sleep**: Tiny delay to fine-tune game speed
+
+**Performance Optimization**: Removed conflicting `sleep()` call - framerate limiting is now handled exclusively by `setFramerateLimit(60)` for more accurate timing.
 
 ---
 
@@ -517,10 +569,14 @@ for (int r = 0; r < ROWS; r++) {  // Top-to-bottom for upward movement
 ```
 
 **Level Up Trigger:**
-1. Player destroys enemy → `score++`
-2. Check if `score >= level * 10`
-3. If true: Increment level, clear all entities, show "LEVEL UP!" screen
-4. After 2 seconds, return to gameplay with increased difficulty
+1. Player destroys enemy → `score += 3`, `killCount++`
+2. Player destroys boss → `score += 5`, `killCount++`
+3. Player destroys meteor → `score += (rand() % 2) + 1` (no killCount change)
+4. Check if `killCount >= level * 10`
+5. If true: Increment level, reset killCount to 0, clear all entities, show "LEVEL UP!" screen
+6. After 2 seconds, return to gameplay with increased difficulty
+
+**Key Change**: Level progression now based on `killCount` (enemies/bosses only), while `score` includes all points including meteor bonuses.
 
 ---
 
@@ -753,20 +809,22 @@ Player sees spaceship moved left
 ### Level Progression Flow
 
 ```
-LEVEL UP SEQUENCE:
-═════════════════
+LEVEL UP SEQUENCE (NEW SYSTEM):
+═══════════════════════════════
 
 Player bullet hits enemy
     ↓
-score++ (now score = 10, level = 1)
+score += 3 (points for display)
+killCount++ (progress tracker)
     ↓
-Check: score >= level * 10?  (10 >= 10? YES)
+Check: killCount >= level * 10?  (10 >= 10? YES)
     ↓
 level++ (now level = 2)
-score = 0
+killCount = 0 (reset for next level)
 bossMoveCounter = 0
     ↓
 Clear entire grid (except spaceship)
+Clear all shield powerups
     ↓
 Reset spaceship to center
     ↓
@@ -780,9 +838,41 @@ Wait 2 seconds (levelUpTimer check)
 currentState = STATE_PLAYING
     ↓
 GAMEPLAY RESUMES WITH INCREASED DIFFICULTY:
-    ├─ Enemy spawn time reduced
+    ├─ Meteor spawn time reduced
+    ├─ Meteor movement speed increased
+    ├─ Enemy spawn time reduced (scales with level)
     ├─ Enemy movement speed increased
-    └─ Bosses spawn if level >= 3
+    ├─ Boss spawn time reduced (if level >= 3)
+    ├─ Boss movement speed increased
+    ├─ Boss firing frequency increased (level 3: every 5 moves, level 4: every 4, level 5: every 3)
+    └─ Shield powerups begin spawning (level 3+)
+
+KEY CHANGE: killCount tracks only enemies/bosses for level progression.
+Score includes everything (enemies=3, bosses=5, meteors=1-2 random) for display/high score.
+```
+
+### Save File Persistence
+
+```
+SAVE/LOAD SYSTEM:
+═════════════════
+
+Save Triggers:
+- Game Over: Saves high score if current score > previous high score
+- Victory: Saves high score if current score > previous high score  
+- Pause Menu → Save & Quit: Saves high score AND current game state
+- Enemy Escape (bottom of screen): Saves high score if new record
+
+Load Options:
+- Main Menu → Load Saved Game: Restores lives, score, level (killCount resets to 0)
+
+File Format: "highScore lives score level"
+Example: "150 2 75 3" means:
+  - High score: 150 points
+  - Saved game: 2 lives, 75 points, Level 3
+  - If lives=0, no saved game available
+
+Storage Location: save-file.txt in project root
 ```
 
 ### Collision Resolution Priority
@@ -793,21 +883,30 @@ ENTITY INTERACTION MATRIX:
 
 When Entity A tries to move into Entity B's cell:
 
-           │ Empty │ Player │ Meteor │ P.Bullet │ Enemy │ Boss │ B.Bullet
-═══════════╪═══════╪════════╪════════╪══════════╪═══════╪══════╪═════════
-Meteor     │ Move  │ Damage │ Pass   │ Destroy  │ Pass  │ Pass │ Pass
-Enemy      │ Move  │ Damage │ Pass   │ +1 Score │ Pass  │ Pass │ Pass
-Boss       │ Move  │ Damage │ Pass   │ +3 Score │ Pass  │ Pass │ Pass
-P.Bullet   │ Move  │ Block  │Destroy │ Pass     │+1Score│+3Scor│ Destroy
-B.Bullet   │ Move  │ Damage │ Pass   │ Destroy  │ Pass  │ Pass │ Pass
+           │ Empty │ Player │ Meteor │ P.Bullet │ Enemy │ Boss │ B.Bullet │ Shield
+═══════════╪═══════╪════════╪════════╪══════════╪═══════╪══════╪══════════╪════════
+Meteor     │ Move  │ Damage*│ Pass   │ Destroy+ │ Pass  │ Pass │ Pass     │ N/A
+Enemy      │ Move  │ Damage*│ Pass   │ +3/Kill  │ Pass  │ Pass │ Pass     │ N/A
+Boss       │ Move  │ Damage*│ Pass   │ +5/Kill  │ Pass  │ Pass │ Pass     │ N/A
+P.Bullet   │ Move  │ Block  │Destroy+│ Pass     │+3/Kill│+5/Kill│ Destroy │ N/A
+B.Bullet   │ Move  │ Damage*│ Pass   │ Destroy  │ Pass  │ Pass │ Pass     │ N/A
+ShieldPwrUp│ Move  │ Collect│ Pass   │ Pass     │ Pass  │ Pass │ Pass     │ N/A
 
 Legend:
 - Move: Entity moves into cell
-- Damage: Player loses life, entity destroyed
+- Damage*: Player loses life (or shield absorbs), entity destroyed, 1s invincibility
 - Pass: Entity phases through
 - Destroy: Both entities destroyed
-- +X Score: Entity destroyed, player gains X points
+- Destroy+: Both destroyed, +1-2 random bonus points
+- +X/Kill: Entity destroyed, player gains X points AND killCount++
 - Block: Bullet cannot move there
+- Collect: Shield powerup consumed, hasShield = true
+- N/A: Shield powerups tracked separately, don't interact with this entity type
+
+NEW SCORING:
+- Enemies: 3 points + killCount++ (toward level progression)
+- Bosses: 5 points + killCount++ (toward level progression)
+- Meteors: 1-2 random points (bonus only, no killCount)
 ```
 
 ### Memory & Performance Considerations
@@ -816,6 +915,18 @@ Legend:
 1. **Fixed Memory**: `grid[23][15]` = 345 integers (1,380 bytes) regardless of entity count
 2. **O(1) Collision Detection**: Just check `grid[targetRow][targetCol]`
 3. **Predictable Performance**: Always scan exactly 345 cells per frame
+4. **Optimized Constants**: `BULLET_OFFSET_X` and `SHIELD_OFFSET` calculated once at compile-time instead of every frame
+
+**Shield Powerup Optimization:**
+- Separate array system (5 slots) prevents grid interference
+- Independent movement logic avoids complex grid scanning
+- Direct position tracking (row/col) enables fast collision checks
+
+**Performance Optimizations Applied:**
+- Removed redundant per-frame calculations (5 xOffset calculations → 1 constant)
+- Removed conflicting timing controls (sleep + framerate limit → framerate limit only)
+- Removed debug output (50+ cout statements) for cleaner execution
+- Pre-calculated offsets at compile-time reduce runtime overhead
 
 **Alternative (Object-Oriented) Would Require:**
 - Dynamic arrays of enemy/bullet objects
@@ -828,7 +939,7 @@ Legend:
 FRAME TIMING AT 60 FPS:
 ═══════════════════════
 
-Frame Duration: ~16.67ms
+Frame Duration: ~16.67ms (60 FPS cap)
 
 Within each frame:
 ├─ Event Polling: ~0.1ms
@@ -836,15 +947,21 @@ Within each frame:
 │  ├─ Input checks: ~0.5ms
 │  ├─ Spawning logic: ~1ms
 │  ├─ Movement & collision: ~3-5ms (depends on entity count)
+│  ├─ Shield powerup updates: ~0.3ms
 │  └─ Effect updates: ~0.5ms
 ├─ Rendering:
 │  ├─ Clear screen: ~0.5ms
 │  ├─ Draw background: ~1ms
 │  ├─ Draw entities: ~3-8ms (depends on entity count)
+│  ├─ Draw shield powerups: ~0.2ms
+│  ├─ Draw effects: ~0.5ms
 │  └─ Draw UI: ~1ms
-└─ Display & sleep: ~50ms (artificial delay)
+└─ Display: ~1ms (buffer swap)
 
-Total: ~60-70ms per frame (intentionally slow for classic game feel)
+Total: ~12-18ms per frame (leaves ~5ms headroom at 60 FPS)
+
+**Optimization**: Removed sleep(50ms) call that was conflicting with setFramerateLimit(60).
+Now timing is handled exclusively by SFML's built-in frame limiter for accurate 60 FPS.
 ```
 
 ### Complete State Dependency Graph
@@ -857,58 +974,119 @@ currentState (Master Controller)
     ├─ Controls which logic executes
     ├─ Controls what gets rendered
     └─ Modified by:
-        ├─ User input (Enter, P, Esc)
-        ├─ lives <= 0
-        └─ score >= threshold
+        ├─ User input (Enter, P, Esc, menu navigation)
+        ├─ lives <= 0 → STATE_GAME_OVER
+        ├─ killCount >= level * 10 → STATE_LEVEL_UP
+        └─ level > MAX_LEVEL → STATE_VICTORY
 
 lives
     ├─ Decreased by: Meteor hit, Enemy hit, Boss hit, Boss bullet hit
-    ├─ Protected by: isInvincible flag
+    ├─ Protected by: isInvincible flag AND hasShield
+    ├─ Shield absorbs first hit, then removed
     └─ Triggers: STATE_GAME_OVER when <= 0
 
-score
-    ├─ Increased by: Destroying enemies (+1), Destroying bosses (+3)
-    └─ Triggers: Level up when >= level * 10
+score (Display/High Score Only)
+    ├─ Increased by: 
+    │   ├─ Destroying enemies (+3 points)
+    │   ├─ Destroying bosses (+5 points)
+    │   └─ Destroying meteors (+1-2 random points)
+    ├─ Saved to file when: New high score achieved
+    └─ Does NOT affect level progression (killCount does)
+
+killCount (Level Progression Tracker)
+    ├─ Increased by: Destroying enemies (+1), Destroying bosses (+1)
+    ├─ NOT increased by: Destroying meteors
+    ├─ Reset to 0 on: Level up, Load saved game
+    └─ Triggers: STATE_LEVEL_UP when >= level * 10
 
 level
-    ├─ Increased by: Reaching score threshold
-    ├─ Affects: Enemy speed, spawn rate, boss appearance, firing rate
-    └─ Triggers: STATE_VICTORY when >= MAX_LEVEL
+    ├─ Increased by: Reaching killCount threshold
+    ├─ Affects: 
+    │   ├─ All entity movement speeds (faster per level)
+    │   ├─ Spawn rates (more frequent per level)
+    │   ├─ Boss appearance (level 3+)
+    │   ├─ Boss firing rate (level 3: 1/5, level 4: 1/4, level 5: 1/3 moves)
+    │   └─ Shield powerup spawning (level 3+)
+    └─ Triggers: STATE_VICTORY when > MAX_LEVEL with enough kills
 
 grid[ROWS][COLS] (Core Game State)
     ├─ Modified by: Spawning, Movement, Collision resolution
     ├─ Read by: Rendering loop, Collision detection
-    └─ Cleared on: Game start, Level up
+    └─ Cleared on: Game start, Level up, Load saved game
+
+shieldPowerup Arrays (Independent System)
+    ├─ Tracks: Up to 5 simultaneous shield powerups
+    ├─ Modified by: Spawning (level 3+), Movement (0.5s intervals), Collection
+    ├─ Movement: Random zigzag (direction: -1/0/1)
+    ├─ Collision: Checked against grid position before/after movement
+    └─ Cleared on: Game start, Level up, Load saved game
+
+hasShield
+    ├─ Set true on: Collecting shield powerup
+    ├─ Set false on: Absorbing any damage (one-time use)
+    └─ Affects: Damage prevention (one hit), Visual overlay rendering
 
 isInvincible
-    ├─ Set true on: Any damage
+    ├─ Set true on: Any damage (after shield check)
     ├─ Set false after: 1 second (invincibilityTimer)
     └─ Affects: Damage prevention, Rendering (blink effect)
+
+highScore (Persistent)
+    ├─ Loaded from: save-file.txt on startup
+    ├─ Updated when: Current score exceeds previous high score
+    ├─ Saved to file on: Game over, Victory, Enemy escape, Save & Quit
+    └─ Displayed in: Main menu, Playing screen, Game over, Victory
+
+hasSavedGame (Persistent Check)
+    ├─ Determined by: savedLevel > 0 AND savedLives > 0
+    ├─ Affects: "Load Saved Game" menu option availability
+    └─ Enables: Game state restoration
 
 All Clocks
     ├─ Restarted on: Specific actions (movement, spawning, shooting)
     ├─ Read continuously: To check if cooldowns/intervals elapsed
-    └─ Control: Game timing, difficulty scaling, visual effects
+    └─ Control: Game timing, difficulty scaling, visual effects, powerup movement
 ```
 
 ---
 
 ## Summary: The Complete Picture
 
-The game is a **state-driven, grid-based arcade shooter** where:
+The game is a **state-driven, grid-based arcade shooter** with **persistent save system** where:
 
-1. **The grid is the single source of truth** - all game logic revolves around reading and writing integer values to `grid[ROWS][COLS]`
+1. **The grid is the single source of truth** - all game logic revolves around reading and writing integer values to `grid[ROWS][COLS]`, with shield powerups tracked independently to avoid interference
 
-2. **Timing controls everything** - SFML Clocks manage when entities spawn, move, and shoot, creating difficulty progression
+2. **Timing controls everything** - SFML Clocks manage when entities spawn, move, and shoot, creating difficulty progression. Optimized with single framerate limiter (60 FPS) for accurate timing
 
-3. **State machine provides structure** - `currentState` determines which code executes and what displays on screen
+3. **State machine provides structure** - `currentState` determines which code executes and what displays on screen, including new game over/victory score displays
 
-4. **Collision is implicit** - No complex math; just check the value of the target cell before moving
+4. **Collision is implicit** - No complex math; just check the value of the target cell before moving. Shield powerups use dual-phase collision detection (before/after movement)
 
-5. **Rendering is reactive** - Every frame, scan the grid and draw sprites where entities exist
+5. **Rendering is reactive** - Every frame, scan the grid and draw sprites where entities exist, with optimized pre-calculated offsets for bullets and shields
 
-6. **Difficulty scales naturally** - As `level` increases, spawn rates increase and movement speeds up through mathematical formulas
+6. **Difficulty scales naturally** - As `level` increases:
+   - Spawn rates increase exponentially
+   - Movement speeds up through mathematical formulas
+   - Boss firing frequency increases (level 3: 1/5, level 4: 1/4, level 5: 1/3)
+   - Shield powerups spawn (level 3+) with random zigzag movement
 
-7. **Everything connects through shared variables** - `lives`, `score`, `level`, and `grid` are accessed by multiple logic blocks, creating emergent gameplay
+7. **New scoring system separates progression from points**:
+   - `killCount` tracks enemies/bosses for level progression (10 per level)
+   - `score` includes everything (enemies=3, bosses=5, meteors=1-2) for display/high score
+   - Meteors provide bonus points without affecting level advancement
 
-The beauty of this design is its **simplicity and directness**: there's no hidden complexity, no abstraction layers. The entire game state is visible in a few key variables, making it easy to understand, debug, and modify.
+8. **Persistence enables continuity**:
+   - High scores save automatically to `save-file.txt`
+   - Game state (lives, score, level) can be saved and restored
+   - Menu displays current high score
+   - Game over/victory screens show final score achieved
+
+9. **Everything connects through shared variables** - `lives`, `score`, `killCount`, `level`, `grid`, `hasShield`, and `highScore` are accessed by multiple logic blocks, creating emergent gameplay
+
+10. **Performance optimizations applied**:
+    - Removed 50+ debug cout statements
+    - Pre-calculated bullet/shield offsets at compile-time
+    - Removed conflicting sleep() call
+    - Independent shield powerup tracking (5 simultaneous max)
+
+The beauty of this design is its **simplicity and directness**: there's no hidden complexity, no abstraction layers. The entire game state is visible in a few key variables, making it easy to understand, debug, and modify. Recent optimizations maintain this clarity while improving performance and adding sophisticated features like persistent saves and advanced powerup systems.

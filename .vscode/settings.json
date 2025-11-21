@@ -2,5 +2,8 @@
     "cmake.generator": "Unix Makefiles",
     "cmake.buildDirectory": "${workspaceFolder}/build",
     "debug.onTaskErrors": "debugAnyway",
-    "debug.saveBeforeStart": "allEditorsInActiveGroup"
+    "debug.saveBeforeStart": "allEditorsInActiveGroup",
+    "files.associations": {
+        "iostream": "cpp"
+    }
 }

@@ -1,5 +1,7 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 #include <ctime>
 using namespace std;
@@ -10,6 +12,8 @@ const int ROWS = 23;
 const int COLS = 15;
 const int CELL_SIZE = 40;
 const int MARGIN = 40; // Margin around the grid for UI spacing
+const float BULLET_OFFSET_X = (CELL_SIZE - CELL_SIZE * 0.3f) / 2.0f; // Center bullets horizontally
+const float SHIELD_OFFSET = CELL_SIZE * -0.15f; // Center shield overlay
 
 // Game States: Constants representing different screens/states of the game
 const int STATE_MENU = 0;
@@ -32,11 +36,42 @@ int main()
     RenderWindow window(VideoMode(windowWidth, windowHeight), "Space Shooter");
     window.setFramerateLimit(60); // Limit frame rate to 60 FPS for smooth gameplay
 
+    // Save File Handling: Load high score and saved game state
+    int highScore = 0;
+    int savedLives = 0;
+    int savedScore = 0;
+    int savedLevel = 0;
+    bool hasSavedGame = false;
+    string saveFile = "save-file.txt";
+    
+    ifstream inputFile(saveFile);
+    if (inputFile.is_open())
+    {
+        // File format: highScore lives score level
+        inputFile >> highScore >> savedLives >> savedScore >> savedLevel;
+        inputFile.close();
+        if (savedLevel > 0 && savedLives > 0)
+        {
+            hasSavedGame = true;
+        }
+    }
+    else
+    {
+        // Create the file with initial values: highScore=0, no saved game
+        ofstream createFile(saveFile);
+        if (createFile.is_open())
+        {
+            createFile << "0 0 0 0";
+            createFile.close();
+        }
+    }
+
     // Game Variables Setup: Initialize core game state variables
     int currentState = STATE_MENU;
     int selectedMenuItem = 0; // Index of the currently selected menu item
     int lives = 3;            // Player's remaining lives
-    int score = 0;            // Current score
+    int score = 0;            // Current score (bonus from meteors)
+    int killCount = 0;        // Count of enemies/bosses destroyed
     int level = 1;            // Current game level
     const int MAX_LEVEL = 5;  // Maximum level before victory
     bool isInvincible = false;                 // Flag for temporary invincibility after being hit
@@ -53,7 +88,19 @@ int main()
 
     // Grid System: 2D array representing the game board
     // 0 = Empty, 1 = Spaceship, 2 = Meteor, 3 = Bullet, 4 = Enemy, 5 = Boss, 6 = Boss Bullet
+    // Note: Shield (when active) is rendered visually but doesn't occupy grid space
+    // Shield powerups use separate array to avoid interference with other entities
     int grid[ROWS][COLS] = {0};
+    
+    // Separate grid for shield powerups (independent from main grid)
+    const int MAX_SHIELD_POWERUPS = 5;
+    int shieldPowerupRow[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
+    int shieldPowerupCol[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
+    bool shieldPowerupActive[MAX_SHIELD_POWERUPS] = {false, false, false, false, false};
+    int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0}; // -1=left, 0=down, 1=right
+
+    // Shield System: Track if player has active shield
+    bool hasShield = false;
 
     // Hit Effect System: Arrays to manage visual effects when entities are destroyed
     const int MAX_HIT_EFFECTS = 50;
@@ -92,6 +139,34 @@ int main()
     lifeIcon.setScale(
         24.0f / lifeTexture.getSize().x,
         24.0f / lifeTexture.getSize().y);
+
+
+    // Shield PowerUp and shield Setup: Visual representation of the shield power-up
+    Texture shieldTexture;
+    if (!shieldTexture.loadFromFile("assets/images/shield.png"))
+    {
+        cerr << "Failed to load shield texture" << endl;
+        return -1;
+    }  
+    Sprite shieldIcon;
+    shieldIcon.setTexture(shieldTexture);
+    
+    Texture shieldPowerUpTexture;
+    if (!shieldPowerUpTexture.loadFromFile("assets/images/shield-powerup.png"))
+    {
+        cerr << "Failed to load shield power-up texture" << endl;
+        return -1;
+    }
+    Sprite shieldPowerUp;
+    shieldPowerUp.setTexture(shieldPowerUpTexture);
+    shieldPowerUp.setScale(
+        static_cast<float>(CELL_SIZE) / shieldPowerUpTexture.getSize().x,
+        static_cast<float>(CELL_SIZE) / shieldPowerUpTexture.getSize().y);
+
+    // Scale shield to be bigger than spaceship (1.3x)
+    shieldIcon.setScale(
+        static_cast<float>(CELL_SIZE * 1.3f) / shieldTexture.getSize().x,
+        static_cast<float>(CELL_SIZE * 1.3f) / shieldTexture.getSize().y);
 
     // Game Background Setup: Background image for the playing area
     Texture bgTexture;
@@ -232,6 +307,73 @@ int main()
         return -1;
     }
 
+    // Sound Effects Setup
+    Music bgMusic;
+    if (!bgMusic.openFromFile("assets/sounds/bg-music.mp3"))
+    {
+        cerr << "Failed to load background music" << endl;
+        return -1;
+    }
+    bgMusic.setLoop(true);
+    bgMusic.setVolume(30);
+    bgMusic.play();
+
+    SoundBuffer shootBuffer, explosionBuffer, damageBuffer, levelUpBuffer;
+    SoundBuffer menuClickBuffer, menuNavBuffer, winBuffer, loseBuffer;
+
+    if (!shootBuffer.loadFromFile("assets/sounds/shoot.wav"))
+    {
+        cerr << "Failed to load shoot sound" << endl;
+        return -1;
+    }
+    if (!explosionBuffer.loadFromFile("assets/sounds/explosion.wav"))
+    {
+        cerr << "Failed to load explosion sound" << endl;
+        return -1;
+    }
+    if (!damageBuffer.loadFromFile("assets/sounds/damage.mp3"))
+    {
+        cerr << "Failed to load damage sound" << endl;
+        return -1;
+    }
+    if (!levelUpBuffer.loadFromFile("assets/sounds/level-up.mp3"))
+    {
+        cerr << "Failed to load level up sound" << endl;
+        return -1;
+    }
+    if (!menuClickBuffer.loadFromFile("assets/sounds/menu-click.mp3"))
+    {
+        cerr << "Failed to load menu click sound" << endl;
+        return -1;
+    }
+    if (!menuNavBuffer.loadFromFile("assets/sounds/menu-navigate.wav"))
+    {
+        cerr << "Failed to load menu navigate sound" << endl;
+        return -1;
+    }
+    if (!winBuffer.loadFromFile("assets/sounds/win.wav"))
+    {
+        cerr << "Failed to load win sound" << endl;
+        return -1;
+    }
+    if (!loseBuffer.loadFromFile("assets/sounds/lose.wav"))
+    {
+        cerr << "Failed to load lose sound" << endl;
+        return -1;
+    }
+
+    Sound shootSound, explosionSound, damageSound, levelUpSound;
+    Sound menuClickSound, menuNavSound, winSound, loseSound;
+
+    shootSound.setBuffer(shootBuffer);
+    explosionSound.setBuffer(explosionBuffer);
+    damageSound.setBuffer(damageBuffer);
+    levelUpSound.setBuffer(levelUpBuffer);
+    menuClickSound.setBuffer(menuClickBuffer);
+    menuNavSound.setBuffer(menuNavBuffer);
+    winSound.setBuffer(winBuffer);
+    loseSound.setBuffer(loseBuffer);
+
     // Main Menu Title Setup
     Text menuTitle("SPACE SHOOTER", font, 40);
     menuTitle.setFillColor(Color::Yellow);
@@ -251,6 +393,11 @@ int main()
         menuItems[i].setPosition(windowWidth / 2 - menuItems[i].getLocalBounds().width / 2.0f, 260 + i * 56);
     }
 
+    // High Score Display for Main Menu
+    Text menuHighScoreText("High Score: 0", font, 24);
+    menuHighScoreText.setFillColor(Color::Yellow);
+    menuHighScoreText.setPosition(windowWidth / 2 - menuHighScoreText.getLocalBounds().width / 2.0f, 180);
+
     // Menu Navigation Instructions Setup
     Text menuInstructions("Use UP/DOWN or W/S to navigate  |  ENTER to select", font, 18);
     menuInstructions.setFillColor(Color(150, 150, 150)); // Gray color
@@ -259,7 +406,7 @@ int main()
     /// In-Game UI Elements Setup
 
     // Game Title (displayed during gameplay)
-    Text title("Space  Shooter  Game", font, 28);
+    Text title("Space  Shooter", font, 28);
     title.setFillColor(Color::Yellow);
     // Place title to the right of the game grid
     title.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN);
@@ -274,15 +421,30 @@ int main()
     scoreText.setFillColor(Color::White);
     scoreText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 200);
 
+    // Enemies Killed Display Text
+    Text killsText("Kills: 0/10", font, 20);
+    killsText.setFillColor(Color::White);
+    killsText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 230);
+
     // Level Display Text
     Text levelText("Level: 1", font, 20);
     levelText.setFillColor(Color::White);
-    levelText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 250);
+    levelText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 280);
+
+    // High Score Display (Playing Screen)
+    Text highScoreText("High Score: 0", font, 20);
+    highScoreText.setFillColor(Color::Yellow);
+    highScoreText.setPosition(MARGIN + COLS * CELL_SIZE + 20, MARGIN + 330);
 
     // Game Over Screen Setup
     Text gameOverTitle("GAME OVER", font, 40);
     gameOverTitle.setFillColor(Color::Red);
     gameOverTitle.setPosition(windowWidth / 2 - gameOverTitle.getLocalBounds().width / 2.0f, 100);
+
+    // Game Over Score Display
+    Text gameOverScore("Final Score: 0", font, 28);
+    gameOverScore.setFillColor(Color::Yellow);
+    gameOverScore.setPosition(windowWidth / 2 - gameOverScore.getLocalBounds().width / 2.0f, 200);
 
     // Game Over Menu Items
     Text gameOverItems[2];
@@ -315,7 +477,7 @@ int main()
     pauseTitle.setPosition(gridCenterX - pauseTitle.getLocalBounds().width / 2.0f, gridCenterY - 200);
 
     Text pauseItems[3];
-    const char pauseTexts[3][20] = {"Resume", "Restart", "Main Menu"};
+    const char pauseTexts[3][20] = {"Resume", "Restart", "Save & Quit"};
     for (int i = 0; i < 3; i++)
     {
         pauseItems[i].setFont(font);
@@ -329,6 +491,11 @@ int main()
     Text victoryTitle("VICTORY!", font, 40);
     victoryTitle.setFillColor(Color::Yellow);
     victoryTitle.setPosition(windowWidth / 2 - victoryTitle.getLocalBounds().width / 2.0f, 100);
+
+    // Victory Score Display
+    Text victoryScore("Final Score: 0", font, 28);
+    victoryScore.setFillColor(Color::White);
+    victoryScore.setPosition(windowWidth / 2 - victoryScore.getLocalBounds().width / 2.0f, 200);
 
     Text victoryItems[2];
     const char victoryTexts[2][20] = {"Restart", "Main Menu"};
@@ -380,11 +547,11 @@ int main()
     meteorDesc.setFillColor(Color::White);
     meteorDesc.setPosition(120, 330);
 
-    Text enemyDesc("Enemy - 1 Point", font, 18);
+    Text enemyDesc("Enemy - 3 Points", font, 18);
     enemyDesc.setFillColor(Color::White);
     enemyDesc.setPosition(120, 370);
 
-    Text bossDesc("Boss - 3 Points (Level 3+)", font, 18);
+    Text bossDesc("Boss - 5 Points (Level 3+)", font, 18);
     bossDesc.setFillColor(Color::White);
     bossDesc.setPosition(120, 410);
 
@@ -400,26 +567,30 @@ int main()
     lifeDesc.setFillColor(Color::White);
     lifeDesc.setPosition(120, 530);
 
+    Text shieldPowerupDesc("Shield Powerup - Absorbs 1 Hit (Level 3+)", font, 18);
+    shieldPowerupDesc.setFillColor(Color::White);
+    shieldPowerupDesc.setPosition(120, 570);
+
     // Objective Section
     Text objectiveTitle("OBJECTIVE", font, 24);
     objectiveTitle.setFillColor(Color::Cyan);
-    objectiveTitle.setPosition(50, 580);
+    objectiveTitle.setPosition(50, 620);
 
-    Text objective1("- Destroy enemies and bosses to score points", font, 18);
+    Text objective1("- Destroy enemies (3 pts) and bosses (5 pts)", font, 18);
     objective1.setFillColor(Color::White);
-    objective1.setPosition(50, 620);
+    objective1.setPosition(50, 660);
 
-    Text objective2("- Each level requires (Level x 10) points", font, 18);
+    Text objective2("- Destroy meteors for 1-2 bonus points", font, 18);
     objective2.setFillColor(Color::White);
-    objective2.setPosition(50, 650);
+    objective2.setPosition(50, 690);
 
-    Text objective3("- Complete Level 5 to win!", font, 18);
+    Text objective3("- Each level: Destroy (Level x 10) enemies/bosses", font, 18);
     objective3.setFillColor(Color::White);
-    objective3.setPosition(50, 680);
+    objective3.setPosition(50, 720);
 
-    Text objective4("- You have 3 lives. Don't let enemies escape!", font, 18);
+    Text objective4("- Complete Level 5 to win! Don't lose 3 lives!", font, 18);
     objective4.setFillColor(Color::White);
-    objective4.setPosition(50, 710);
+    objective4.setPosition(50, 750);
 
     Text instructionsBack("Press ESC or BACKSPACE to return to menu", font, 18);
     instructionsBack.setFillColor(Color(150, 150, 150));
@@ -446,6 +617,11 @@ int main()
     Clock bossMoveClock;
     Clock bossBulletMoveClock;
     float nextBossSpawnTime = 8.0f + (rand() % 5); // Random interval between 8-12 seconds
+
+    // Shield Powerup Spawning Logic (Spawns after level 3)
+    Clock shieldPowerupSpawnClock;
+    Clock shieldPowerupMoveClock;
+    float nextShieldPowerupSpawnTime = 15.0f + (rand() % 10); // Random interval between 15-25 seconds
 
     // Bullet Firing Logic
     Clock bulletMoveClock;
@@ -483,24 +659,30 @@ int main()
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
                     selectedMenuItem = (selectedMenuItem - 1 + 4) % 4;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
                     selectedMenuItem = (selectedMenuItem + 1) % 4;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 // Select menu item
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
+                    menuClickSound.play();
                     if (selectedMenuItem == 0)
                     { // Start Game
+                        bgMusic.stop();
                         currentState = STATE_PLAYING;
                         // Reset game state variables for a new game
                         lives = 3;
                         score = 0;
+                        killCount = 0;
                         level = 1;
                         bossMoveCounter = 0;
+                        hasShield = false;
                         // Clear the grid
                         for (int r = 0; r < ROWS; r++)
                         {
@@ -508,6 +690,11 @@ int main()
                             {
                                 grid[r][c] = 0;
                             }
+                        }
+                        // Clear shield powerups
+                        for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
+                        {
+                            shieldPowerupActive[i] = false;
                         }
                         // Reset spaceship position
                         spaceshipCol = COLS / 2;
@@ -521,6 +708,53 @@ int main()
                         bossMoveClock.restart();
                         bossBulletMoveClock.restart();
                         bulletMoveClock.restart();
+                        shieldPowerupSpawnClock.restart();
+                        shieldPowerupMoveClock.restart();
+                    }
+                    else if (selectedMenuItem == 1)
+                    { // Load Saved Game
+                        if (hasSavedGame)
+                        {
+                            bgMusic.stop();
+                            currentState = STATE_PLAYING;
+                            // Restore saved game state
+                            lives = savedLives;
+                            score = savedScore;
+                            killCount = 0; // Always start kills from 0
+                            level = savedLevel;
+                            bossMoveCounter = 0;
+                            hasShield = false;
+                            // Clear the grid
+                            for (int r = 0; r < ROWS; r++)
+                            {
+                                for (int c = 0; c < COLS; c++)
+                                {
+                                    grid[r][c] = 0;
+                                }
+                            }
+                            // Clear shield powerups
+                            for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
+                            {
+                                shieldPowerupActive[i] = false;
+                            }
+                            // Reset spaceship position
+                            spaceshipCol = COLS / 2;
+                            grid[ROWS - 1][spaceshipCol] = 1;
+                            // Restart all game clocks
+                            meteorSpawnClock.restart();
+                            meteorMoveClock.restart();
+                            enemySpawnClock.restart();
+                            enemyMoveClock.restart();
+                            bossSpawnClock.restart();
+                            bossMoveClock.restart();
+                            bossBulletMoveClock.restart();
+                            bulletMoveClock.restart();
+                            shieldPowerupSpawnClock.restart();
+                            shieldPowerupMoveClock.restart();
+                        }
+                        else
+                        {
+                        }
                     }
                     else if (selectedMenuItem == 2)
                     { // Instructions
@@ -528,6 +762,7 @@ int main()
                     }
                     else if (selectedMenuItem == 3)
                     { // Exit
+                        bgMusic.stop();
                         window.close();
                     }
                     menuAction = true;
@@ -564,24 +799,29 @@ int main()
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
                     selectedMenuItem = (selectedMenuItem - 1 + 2) % 2;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
                     selectedMenuItem = (selectedMenuItem + 1) % 2;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 // Select game over menu item
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
+                    menuClickSound.play();
                     if (selectedMenuItem == 0)
                     { // Restart Game
                         currentState = STATE_PLAYING;
                         // Reset game state
                         lives = 3;
                         score = 0;
+                        killCount = 0;
                         level = 1;
                         bossMoveCounter = 0;
+                        hasShield = false;
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
@@ -602,6 +842,10 @@ int main()
                     }
                     else if (selectedMenuItem == 1)
                     { // Return to Main Menu
+                        if (bgMusic.getStatus() != Music::Playing)
+                        {
+                            bgMusic.play();
+                        }
                         currentState = STATE_MENU;
                         selectedMenuItem = 0;
                     }
@@ -635,6 +879,7 @@ int main()
             {
                 if (Keyboard::isKeyPressed(Keyboard::Escape) || Keyboard::isKeyPressed(Keyboard::BackSpace))
                 {
+                    menuClickSound.play();
                     currentState = STATE_MENU;
                     selectedMenuItem = 0;
                     menuClock.restart();
@@ -652,7 +897,6 @@ int main()
                     currentState = STATE_PAUSED;
                     selectedMenuItem = 0;
                     menuClock.restart();
-                    cout << "Game Paused" << endl;
                 }
             }
 
@@ -666,7 +910,6 @@ int main()
                     grid[ROWS - 1][spaceshipCol] = 0; // Clear old position
                     spaceshipCol--;
                     grid[ROWS - 1][spaceshipCol] = 1; // Set new position
-                    cout << "Moved Left to column " << spaceshipCol << endl;
                     moved = true;
                 }
                 // Move Right
@@ -675,7 +918,6 @@ int main()
                     grid[ROWS - 1][spaceshipCol] = 0; // Clear old position
                     spaceshipCol++;
                     grid[ROWS - 1][spaceshipCol] = 1; // Set new position
-                    cout << "Moved Right to column " << spaceshipCol << endl;
                     moved = true;
                 }
 
@@ -693,7 +935,7 @@ int main()
                 if (bulletRow >= 0 && grid[bulletRow][spaceshipCol] == 0)
                 {
                     grid[bulletRow][spaceshipCol] = 3; // 3 represents bullet
-                    cout << "Bullet fired from column " << spaceshipCol << endl;
+                    shootSound.play();
                 }
                 bulletFireCooldown = milliseconds(300);
                 bulletFireClock.restart();
@@ -707,7 +949,6 @@ int main()
                 if (grid[0][randomCol] == 0)
                 {
                     grid[0][randomCol] = 2; // 2 represents meteor
-                    cout << "Meteor spawned at column " << randomCol << endl;
                 }
                 meteorSpawnClock.restart();
                 nextSpawnTime = 1.0f + (rand() % 3); // Next spawn in 1-3 seconds
@@ -721,7 +962,6 @@ int main()
                 if (grid[0][randomCol] == 0)
                 {
                     grid[0][randomCol] = 4; // 4 represents enemy
-                    cout << "Enemy spawned at column " << randomCol << endl;
                 }
                 enemySpawnClock.restart();
                 // Calculate next spawn time based on level difficulty
@@ -742,7 +982,6 @@ int main()
                 if (grid[0][randomCol] == 0)
                 {
                     grid[0][randomCol] = 5; // 5 represents boss
-                    cout << "Boss spawned at column " << randomCol << endl;
                 }
                 bossSpawnClock.restart();
                 // Calculate next boss spawn time based on level
@@ -753,8 +992,44 @@ int main()
                 nextBossSpawnTime = bossBaseTime + (rand() % (int)bossVariance);
             }
 
-            // Meteor Movement Logic (Moves down every 0.833 seconds)
-            if (meteorMoveClock.getElapsedTime().asSeconds() >= 0.833f)
+            // Shield Powerup Spawning Logic (Only spawns at Level 3 and above, rare spawn)
+            if (level >= 3 && shieldPowerupSpawnClock.getElapsedTime().asSeconds() >= nextShieldPowerupSpawnTime)
+            {
+                // Find an inactive slot for new powerup
+                for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
+                {
+                    if (!shieldPowerupActive[i])
+                    {
+                        int randomCol = rand() % COLS;
+                        shieldPowerupRow[i] = 0;
+                        shieldPowerupCol[i] = randomCol;
+                        shieldPowerupActive[i] = true;
+                        shieldPowerupDirection[i] = 0; // Start moving down
+                        break;
+                    }
+                }
+                shieldPowerupSpawnClock.restart();
+                // Calculate next shield powerup spawn time (rarer at level 3-4, less rare at level 5)
+                float shieldBaseTime;
+                float shieldVariance;
+                if (level < 5)
+                {
+                    shieldBaseTime = 20.0f; // Rare spawn at levels 3-4
+                    shieldVariance = 15.0f;
+                }
+                else
+                {
+                    shieldBaseTime = 12.0f; // Less rare at level 5
+                    shieldVariance = 8.0f;
+                }
+                nextShieldPowerupSpawnTime = shieldBaseTime + (rand() % (int)shieldVariance);
+            }
+
+            // Meteor Movement Logic (Speed scales with level, same as enemies)
+            float meteorMoveSpeed = 0.833f - ((level - 1) * 0.1f);
+            if (meteorMoveSpeed < 0.333f)
+                meteorMoveSpeed = 0.333f;
+            if (meteorMoveClock.getElapsedTime().asSeconds() >= meteorMoveSpeed)
             {
                 // Iterate from bottom to top to avoid overwriting entities as they move down
                 for (int r = ROWS - 1; r >= 0; r--)
@@ -767,7 +1042,6 @@ int main()
                             if (r == ROWS - 1)
                             {
                                 grid[r][c] = 0; // Remove meteor
-                                cout << "Meteor removed at bottom" << endl;
                             }
                             else
                             {
@@ -780,18 +1054,45 @@ int main()
                                 // Collision with Spaceship
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    if (!isInvincible)
+                                    // Check if player has shield
+                                    if (hasShield)
+                                    {
+                                        hasShield = false; // Shield absorbs the hit
+                                    }
+                                    else if (!isInvincible)
                                     {
                                         lives--;
+                                        damageSound.play();
                                         isInvincible = true;
                                         invincibilityTimer.restart();
-                                        cout << "Meteor hit spaceship! Lives remaining: " << lives << endl;
                                         // Check for Game Over
                                         if (lives <= 0)
                                         {
+                                            // Update high score if current score is higher
+                                            if (score > highScore)
+                                            {
+                                                highScore = score;
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            loseSound.play();
                                             currentState = STATE_GAME_OVER;
                                             selectedMenuItem = 0;
-                                            cout << "Game Over!" << endl;
                                         }
                                     }
                                     grid[r + 1][c] = 0; // Remove meteor
@@ -799,7 +1100,9 @@ int main()
                                 // Collision with Player Bullet
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    cout << "Meteor destroyed by bullet!" << endl;
+                                    int meteorPoints = 1 + (rand() % 2); // Random 1 or 2 points
+                                    score += meteorPoints;
+                                    explosionSound.play();
                                     grid[r + 1][c] = 0; // Destroy both meteor and bullet
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -821,6 +1124,61 @@ int main()
                 meteorMoveClock.restart();
             }
 
+            // Shield Powerup Movement Logic (Random zigzag movement, separate from main grid)
+            if (shieldPowerupMoveClock.getElapsedTime().asSeconds() >= 0.5f)
+            {
+                for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
+                {
+                    if (shieldPowerupActive[i])
+                    {
+                        // Check if powerup reached the bottom
+                        if (shieldPowerupRow[i] >= ROWS - 1)
+                        {
+                            shieldPowerupActive[i] = false;
+                            continue;
+                        }
+
+                        // Check collision with spaceship BEFORE moving
+                        if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
+                        {
+                            hasShield = true;
+                            levelUpSound.play(); // Use level up sound for powerup collection
+                            shieldPowerupActive[i] = false;
+                            continue;
+                        }
+
+                        // Move down
+                        shieldPowerupRow[i]++;
+
+                        // Random horizontal movement (zigzag)
+                        int randomMove = rand() % 3; // 0=left, 1=stay, 2=right
+                        if (randomMove == 0 && shieldPowerupCol[i] > 0)
+                        {
+                            shieldPowerupCol[i]--; // Move left
+                            shieldPowerupDirection[i] = -1;
+                        }
+                        else if (randomMove == 2 && shieldPowerupCol[i] < COLS - 1)
+                        {
+                            shieldPowerupCol[i]++; // Move right
+                            shieldPowerupDirection[i] = 1;
+                        }
+                        else
+                        {
+                            shieldPowerupDirection[i] = 0; // Stay in same column
+                        }
+
+                        // Check collision with spaceship AFTER moving
+                        if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
+                        {
+                            hasShield = true;
+                            levelUpSound.play(); // Use level up sound for powerup collection
+                            shieldPowerupActive[i] = false;
+                        }
+                    }
+                }
+                shieldPowerupMoveClock.restart();
+            }
+
             // Enemy Movement Logic (Speed increases with level)
             float enemyMoveSpeed = 0.833f - ((level - 1) * 0.1f);
             if (enemyMoveClock.getElapsedTime().asSeconds() >= enemyMoveSpeed)
@@ -837,15 +1195,37 @@ int main()
                             {
                                 grid[r][c] = 0; // Remove enemy
                                 lives--;        // Penalty for letting enemy escape
+                                damageSound.play();
                                 isInvincible = true;
                                 invincibilityTimer.restart();
-                                cout << "Enemy escaped! Lives remaining: " << lives << endl;
                                 // Check for Game Over
                                 if (lives <= 0)
                                 {
+                                    // Update high score if current score is higher
+                                    if (score > highScore)
+                                    {
+                                        highScore = score;
+                                        ofstream outputFile(saveFile);
+                                        if (outputFile.is_open())
+                                        {
+                                            outputFile << highScore << " 0 0 0";
+                                            outputFile.close();
+                                            hasSavedGame = false;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ofstream outputFile(saveFile);
+                                        if (outputFile.is_open())
+                                        {
+                                            outputFile << highScore << " 0 0 0";
+                                            outputFile.close();
+                                            hasSavedGame = false;
+                                        }
+                                    }
+                                    loseSound.play();
                                     currentState = STATE_GAME_OVER;
                                     selectedMenuItem = 0;
-                                    cout << "Game Over!" << endl;
                                 }
                             }
                             else
@@ -859,18 +1239,46 @@ int main()
                                 // Collision with Spaceship
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    if (!isInvincible)
+                                    // Check if player has shield
+                                    if (hasShield)
+                                    {
+                                        hasShield = false; // Shield absorbs the hit
+                                        explosionSound.play();
+                                    }
+                                    else if (!isInvincible)
                                     {
                                         lives--;
+                                        damageSound.play();
                                         isInvincible = true;
                                         invincibilityTimer.restart();
-                                        cout << "Enemy hit spaceship! Lives remaining: " << lives << endl;
                                         // Check for Game Over
                                         if (lives <= 0)
                                         {
+                                            // Update high score if current score is higher
+                                            if (score > highScore)
+                                            {
+                                                highScore = score;
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            loseSound.play();
                                             currentState = STATE_GAME_OVER;
                                             selectedMenuItem = 0;
-                                            cout << "Game Over!" << endl;
                                         }
                                     }
                                     grid[r + 1][c] = 0; // Remove enemy
@@ -878,8 +1286,9 @@ int main()
                                 // Collision with Player Bullet
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    score += 1; // Award points
-                                    cout << "Enemy destroyed by bullet! +1 point. Score: " << score << endl;
+                                    score += 3; // Award 3 points for enemy
+                                    killCount++; // Increment kill counter
+                                    explosionSound.play();
                                     grid[r + 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -893,12 +1302,13 @@ int main()
                                             break;
                                         }
                                     }
-                                    // Check for Level Up Condition
-                                    int scoreNeeded = level * 10;
-                                    if (level < MAX_LEVEL && score >= scoreNeeded)
+                                    // Check for Level Up Condition (based on kills, not score)
+                                    int killsNeeded = level * 10;
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         level++;
-                                        score = 0;           // Reset score for next level
+                                        levelUpSound.play();
+                                        killCount = 0;       // Reset kill counter for next level
                                         bossMoveCounter = 0; // Reset boss firing counter
                                         // Clear grid of all entities
                                         for (int r = 0; r < ROWS; r++)
@@ -919,14 +1329,35 @@ int main()
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
-                                        cout << "Level Up! Now at Level " << level << endl;
                                     }
-                                    else if (level >= MAX_LEVEL && score >= scoreNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         // Victory Condition Met
+                                        // Update high score if current score is higher
+                                        if (score > highScore)
+                                        {
+                                            highScore = score;
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        winSound.play();
                                         currentState = STATE_VICTORY;
                                         selectedMenuItem = 0;
-                                        cout << "Victory! Game Complete!" << endl;
                                     }
                                 }
                             }
@@ -954,15 +1385,37 @@ int main()
                             {
                                 grid[r][c] = 0; // Remove boss
                                 lives--;        // Penalty
+                                damageSound.play();
                                 isInvincible = true;
                                 invincibilityTimer.restart();
-                                cout << "Boss escaped! Lives remaining: " << lives << endl;
                                 // Check for Game Over
                                 if (lives <= 0)
                                 {
+                                    // Update high score if current score is higher
+                                    if (score > highScore)
+                                    {
+                                        highScore = score;
+                                        ofstream outputFile(saveFile);
+                                        if (outputFile.is_open())
+                                        {
+                                            outputFile << highScore << " 0 0 0";
+                                            outputFile.close();
+                                            hasSavedGame = false;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ofstream outputFile(saveFile);
+                                        if (outputFile.is_open())
+                                        {
+                                            outputFile << highScore << " 0 0 0";
+                                            outputFile.close();
+                                            hasSavedGame = false;
+                                        }
+                                    }
+                                    loseSound.play();
                                     currentState = STATE_GAME_OVER;
                                     selectedMenuItem = 0;
-                                    cout << "Game Over!" << endl;
                                 }
                             }
                             else
@@ -980,18 +1433,46 @@ int main()
                                 // Collision with Spaceship
                                 else if (grid[r + 1][c] == 1)
                                 {
-                                    if (!isInvincible)
+                                    // Check if player has shield
+                                    if (hasShield)
+                                    {
+                                        hasShield = false; // Shield absorbs the hit
+                                        explosionSound.play();
+                                    }
+                                    else if (!isInvincible)
                                     {
                                         lives--;
+                                        damageSound.play();
                                         isInvincible = true;
                                         invincibilityTimer.restart();
-                                        cout << "Boss hit spaceship! Lives remaining: " << lives << endl;
                                         // Check for Game Over
                                         if (lives <= 0)
                                         {
+                                            // Update high score if current score is higher
+                                            if (score > highScore)
+                                            {
+                                                highScore = score;
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            loseSound.play();
                                             currentState = STATE_GAME_OVER;
                                             selectedMenuItem = 0;
-                                            cout << "Game Over!" << endl;
                                         }
                                     }
                                     grid[r + 1][c] = 0; // Remove boss
@@ -999,8 +1480,9 @@ int main()
                                 // Collision with Player Bullet
                                 else if (grid[r + 1][c] == 3)
                                 {
-                                    score += 3; // Award 3 points for boss
-                                    cout << "Boss destroyed by bullet! +3 points. Score: " << score << endl;
+                                    score += 5; // Award 5 points for boss
+                                    killCount++; // Increment kill counter
+                                    explosionSound.play();
                                     grid[r + 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -1014,12 +1496,13 @@ int main()
                                             break;
                                         }
                                     }
-                                    // Check for Level Up Condition
-                                    int scoreNeeded = level * 10;
-                                    if (level < MAX_LEVEL && score >= scoreNeeded)
+                                    // Check for Level Up Condition (based on kills)
+                                    int killsNeeded = level * 10;
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         level++;
-                                        score = 0;
+                                        levelUpSound.play();
+                                        killCount = 0;
                                         bossMoveCounter = 0;
                                         // Clear grid
                                         for (int r = 0; r < ROWS; r++)
@@ -1040,14 +1523,13 @@ int main()
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
-                                        cout << "Level Up! Now at Level " << level << endl;
                                     }
-                                    else if (level >= MAX_LEVEL && score >= scoreNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         // Victory Condition
+                                        winSound.play();
                                         currentState = STATE_VICTORY;
                                         selectedMenuItem = 0;
-                                        cout << "Victory! Game Complete!" << endl;
                                     }
                                 }
                             }
@@ -1058,19 +1540,19 @@ int main()
                 // Boss Firing Logic
                 bossMoveCounter++;
 
-                // Determine firing frequency based on level
-                int firingInterval;
+                // Determine firing frequency based on level (slower intervals)
+                float firingInterval;
                 if (level == 3)
                 {
-                    firingInterval = 3; // Fire every 3rd movement
+                    firingInterval = 5; // Fire every 5th movement
                 }
                 else if (level == 4)
                 {
-                    firingInterval = 2; // Fire every 2nd movement
+                    firingInterval = 4; // Fire every 4th movement
                 }
                 else
                 {                       // Level 5
-                    firingInterval = 1.5; // Fire almost every movement
+                    firingInterval = 3; // Fire every 3rd movement
                 }
 
                 // Execute Boss Firing
@@ -1089,7 +1571,6 @@ int main()
                                     if (bulletRow < ROWS && grid[bulletRow][c] == 0)
                                     {
                                         grid[bulletRow][c] = 6; // 6 represents boss bullet
-                                        cout << "Boss fired bullet at column " << c << " (Level " << level << ")" << endl;
                                     }
                                 }
                             }
@@ -1101,8 +1582,8 @@ int main()
                 bossMoveClock.restart();
             }
 
-            // Boss Bullet Movement Logic (Moves faster than bosses)
-            float bossBulletSpeed = bossMoveSpeed / 2.0f;
+            // Boss Bullet Movement Logic (Moves faster than other entities)
+            float bossBulletSpeed = 0.15f; // Fast constant speed regardless of level
             if (bossBulletMoveClock.getElapsedTime().asSeconds() >= bossBulletSpeed)
             {
                 // Iterate from bottom to top
@@ -1123,18 +1604,46 @@ int main()
                                 // Collision with Spaceship
                                 if (grid[r + 1][c] == 1)
                                 {
-                                    if (!isInvincible)
+                                    // Check if player has shield
+                                    if (hasShield)
+                                    {
+                                        hasShield = false; // Shield absorbs the hit
+                                        explosionSound.play();
+                                    }
+                                    else if (!isInvincible)
                                     {
                                         lives--;
+                                        damageSound.play();
                                         isInvincible = true;
                                         invincibilityTimer.restart();
-                                        cout << "Boss bullet hit spaceship! Lives remaining: " << lives << endl;
                                         // Check for Game Over
                                         if (lives <= 0)
                                         {
+                                            // Update high score if current score is higher
+                                            if (score > highScore)
+                                            {
+                                                highScore = score;
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ofstream outputFile(saveFile);
+                                                if (outputFile.is_open())
+                                                {
+                                                    outputFile << highScore << " 0 0 0 0";
+                                                    outputFile.close();
+                                                    hasSavedGame = false;
+                                                }
+                                            }
+                                            loseSound.play();
                                             currentState = STATE_GAME_OVER;
                                             selectedMenuItem = 0;
-                                            cout << "Game Over!" << endl;
                                         }
                                     }
                                     // Trigger hit effect
@@ -1181,20 +1690,20 @@ int main()
                             if (r == 0)
                             {
                                 grid[r][c] = 0; // Remove bullet
-                                cout << "Bullet removed at top" << endl;
                             }
                             else
                             {
                                 grid[r][c] = 0; // Clear current position
-                                // Move up if next cell is empty or contains another bullet
-                                if (grid[r - 1][c] == 0 || grid[r - 1][c] == 3)
+                                // Move up if next cell is empty, contains another bullet, or has shield powerup (pass through)
+                                if (grid[r - 1][c] == 0 || grid[r - 1][c] == 3 || grid[r - 1][c] == 7)
                                 {
-                                    grid[r - 1][c] = 3;
+                                    if (grid[r - 1][c] != 7) // Only overwrite if not shield powerup
+                                        grid[r - 1][c] = 3;
                                 }
                                 // Collision with Boss Bullet
                                 else if (grid[r - 1][c] == 6)
                                 {
-                                    cout << "Player bullet destroyed boss bullet!" << endl;
+                                    explosionSound.play();
                                     grid[r - 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -1212,7 +1721,9 @@ int main()
                                 // Collision with Meteor
                                 else if (grid[r - 1][c] == 2)
                                 {
-                                    cout << "Bullet hit meteor!" << endl;
+                                    int meteorPoints = 1 + (rand() % 2); // Random 1 or 2 points
+                                    score += meteorPoints;
+                                    explosionSound.play();
                                     grid[r - 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -1230,8 +1741,9 @@ int main()
                                 // Collision with Enemy
                                 else if (grid[r - 1][c] == 4)
                                 {
-                                    score += 1; // Award points
-                                    cout << "Bullet hit enemy! +1 point. Score: " << score << endl;
+                                    score += 3; // Award 3 points
+                                    killCount++; // Increment kill counter
+                                    explosionSound.play();
                                     grid[r - 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -1246,11 +1758,12 @@ int main()
                                         }
                                     }
                                     // Check for Level Up
-                                    int scoreNeeded = level * 10;
-                                    if (level < MAX_LEVEL && score >= scoreNeeded)
+                                    int killsNeeded = level * 10;
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         level++;
-                                        score = 0;
+                                        levelUpSound.play();
+                                        killCount = 0;
                                         bossMoveCounter = 0;
                                         // Clear grid
                                         for (int r = 0; r < ROWS; r++)
@@ -1271,21 +1784,44 @@ int main()
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
-                                        cout << "Level Up! Now at Level " << level << endl;
                                     }
-                                    else if (level >= MAX_LEVEL && score >= scoreNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         // Victory Condition
+                                        // Update high score if current score is higher
+                                        if (score > highScore)
+                                        {
+                                            highScore = score;
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0 0"; // Clear saved game
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Clear saved game on victory
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        winSound.play();
                                         currentState = STATE_VICTORY;
                                         selectedMenuItem = 0;
-                                        cout << "Victory! Game Complete!" << endl;
                                     }
                                 }
                                 // Collision with Boss
                                 else if (grid[r - 1][c] == 5)
                                 {
-                                    score += 3; // Award points
-                                    cout << "Bullet hit boss! +3 points. Score: " << score << endl;
+                                    score += 5; // Award 5 points
+                                    killCount++; // Increment kill counter
+                                    explosionSound.play();
                                     grid[r - 1][c] = 0; // Destroy both
                                     // Trigger hit effect
                                     for (int i = 0; i < MAX_HIT_EFFECTS; i++)
@@ -1300,11 +1836,12 @@ int main()
                                         }
                                     }
                                     // Check for Level Up
-                                    int scoreNeeded = level * 10;
-                                    if (level < MAX_LEVEL && score >= scoreNeeded)
+                                    int killsNeeded = level * 10;
+                                    if (level < MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         level++;
-                                        score = 0;
+                                        levelUpSound.play();
+                                        killCount = 0;
                                         bossMoveCounter = 0;
                                         // Clear grid
                                         for (int r = 0; r < ROWS; r++)
@@ -1325,14 +1862,36 @@ int main()
                                         currentState = STATE_LEVEL_UP;
                                         levelUpTimer.restart();
                                         levelUpBlinkClock.restart();
-                                        cout << "Level Up! Now at Level " << level << endl;
                                     }
-                                    else if (level >= MAX_LEVEL && score >= scoreNeeded)
+                                    else if (level >= MAX_LEVEL && killCount >= killsNeeded)
                                     {
                                         // Victory Condition
+                                        // Update high score if current score is higher
+                                        if (score > highScore)
+                                        {
+                                            highScore = score;
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0"; // Clear saved game
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Clear saved game on victory
+                                            ofstream outputFile(saveFile);
+                                            if (outputFile.is_open())
+                                            {
+                                                outputFile << highScore << " 0 0 0";
+                                                outputFile.close();
+                                                hasSavedGame = false;
+                                            }
+                                        }
+                                        winSound.play();
                                         currentState = STATE_VICTORY;
                                         selectedMenuItem = 0;
-                                        cout << "Victory! Game Complete!" << endl;
                                     }
                                 }
                             }
@@ -1361,7 +1920,6 @@ int main()
             if (isInvincible && invincibilityTimer.getElapsedTime().asSeconds() >= INVINCIBILITY_DURATION)
             {
                 isInvincible = false;
-                cout << "Invincibility ended" << endl;
             }
 
         } // End of PLAYING state
@@ -1387,6 +1945,8 @@ int main()
                 bossSpawnClock.restart();
                 bossMoveClock.restart();
                 bossBulletMoveClock.restart();
+                shieldPowerupSpawnClock.restart();
+                shieldPowerupMoveClock.restart();
             }
         }
 
@@ -1401,23 +1961,28 @@ int main()
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
                     selectedMenuItem = (selectedMenuItem - 1 + 2) % 2;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
                     selectedMenuItem = (selectedMenuItem + 1) % 2;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
+                    menuClickSound.play();
                     if (selectedMenuItem == 0)
                     { // Restart Game
                         currentState = STATE_PLAYING;
                         lives = 3;
                         score = 0;
+                        killCount = 0;
                         level = 1;
                         bossMoveCounter = 0;
                         isInvincible = false;
+                        hasShield = false;
                         for (int r = 0; r < ROWS; r++)
                         {
                             for (int c = 0; c < COLS; c++)
@@ -1435,9 +2000,15 @@ int main()
                         bossMoveClock.restart();
                         bossBulletMoveClock.restart();
                         bulletMoveClock.restart();
+                        shieldPowerupSpawnClock.restart();
+                        shieldPowerupMoveClock.restart();
                     }
                     else if (selectedMenuItem == 1)
                     { // Main Menu
+                        if (bgMusic.getStatus() != Music::Playing)
+                        {
+                            bgMusic.play();
+                        }
                         currentState = STATE_MENU;
                         selectedMenuItem = 0;
                     }
@@ -1462,24 +2033,27 @@ int main()
                 if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W))
                 {
                     selectedMenuItem = (selectedMenuItem - 1 + 3) % 3;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S))
                 {
                     selectedMenuItem = (selectedMenuItem + 1) % 3;
+                    menuNavSound.play();
                     menuAction = true;
                 }
                 else if (Keyboard::isKeyPressed(Keyboard::Enter))
                 {
+                    menuClickSound.play();
                     if (selectedMenuItem == 0)
                     { // Resume Game
                         currentState = STATE_PLAYING;
-                        cout << "Game Resumed" << endl;
                     }
                     else if (selectedMenuItem == 1)
-                    { // Restart Level (Keep level/lives, reset score)
+                    { // Restart Level (Keep level/lives, reset score and kills)
                         currentState = STATE_PLAYING;
                         score = 0;
+                        killCount = 0;
                         bossMoveCounter = 0;
                         isInvincible = false;
                         // Clear grid but keep spaceship
@@ -1500,10 +2074,26 @@ int main()
                         bossMoveClock.restart();
                         bossBulletMoveClock.restart();
                         bulletMoveClock.restart();
-                        cout << "Game Restarted at Level " << level << " with " << lives << " lives" << endl;
+                        shieldPowerupSpawnClock.restart();
+                        shieldPowerupMoveClock.restart();
                     }
                     else if (selectedMenuItem == 2)
-                    { // Main Menu
+                    { // Save and Quit to Main Menu
+                        // Save current game state (no killCount)
+                        ofstream outputFile(saveFile);
+                        if (outputFile.is_open())
+                        {
+                            outputFile << highScore << " " << lives << " " << score << " " << level;
+                            outputFile.close();
+                            hasSavedGame = true;
+                            savedLives = lives;
+                            savedScore = score;
+                            savedLevel = level;
+                        }
+                        if (bgMusic.getStatus() != Music::Playing)
+                        {
+                            bgMusic.play();
+                        }
                         currentState = STATE_MENU;
                         selectedMenuItem = 0;
                     }
@@ -1512,7 +2102,6 @@ int main()
                 else if (Keyboard::isKeyPressed(Keyboard::P))
                 { // P to resume
                     currentState = STATE_PLAYING;
-                    cout << "Game Resumed" << endl;
                     menuAction = true;
                 }
 
@@ -1531,6 +2120,14 @@ int main()
             // Draw Main Menu
             window.draw(menuBackground);
             window.draw(menuTitle);
+
+            // Update and draw high score
+            char menuHighScoreBuffer[50];
+            sprintf(menuHighScoreBuffer, "High Score: %d", highScore);
+            menuHighScoreText.setString(menuHighScoreBuffer);
+            menuHighScoreText.setPosition(windowWidth / 2 - menuHighScoreText.getLocalBounds().width / 2.0f, 180);
+            window.draw(menuHighScoreText);
+
             for (int i = 0; i < 4; i++)
             {
                 if (i == selectedMenuItem)
@@ -1581,14 +2178,12 @@ int main()
             window.draw(bossDesc);
 
             // Player bullet sprite
-            float bulletWidth = CELL_SIZE * 0.3f;
-            float xOffset = (CELL_SIZE - bulletWidth) / 2.0f;
-            bullet.setPosition(60 + xOffset, 445);
+            bullet.setPosition(60 + BULLET_OFFSET_X, 445);
             window.draw(bullet);
             window.draw(bulletDesc);
 
             // Boss bullet sprite
-            bossBullet.setPosition(60 + xOffset, 485);
+            bossBullet.setPosition(60 + BULLET_OFFSET_X, 485);
             window.draw(bossBullet);
             window.draw(bossBulletDesc);
 
@@ -1596,6 +2191,11 @@ int main()
             lifeIcon.setPosition(60 + 8, 525);
             window.draw(lifeIcon);
             window.draw(lifeDesc);
+
+            // Shield powerup sprite
+            shieldPowerUp.setPosition(60, 565);
+            window.draw(shieldPowerUp);
+            window.draw(shieldPowerupDesc);
 
             // Draw objectives
             window.draw(objectiveTitle);
@@ -1634,10 +2234,7 @@ int main()
                     }
                     else if (grid[r][c] == 3)
                     { // Player Bullet
-                        // Center bullet horizontally
-                        float bulletWidth = CELL_SIZE * 0.3f;
-                        float xOffset = (CELL_SIZE - bulletWidth) / 2.0f;
-                        bullet.setPosition(MARGIN + c * CELL_SIZE + xOffset, MARGIN + r * CELL_SIZE);
+                        bullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bullet);
                     }
                     else if (grid[r][c] == 4)
@@ -1652,13 +2249,28 @@ int main()
                     }
                     else if (grid[r][c] == 6)
                     { // Boss Bullet
-                        // Center bullet horizontally
-                        float bulletWidth = CELL_SIZE * 0.3f;
-                        float xOffset = (CELL_SIZE - bulletWidth) / 2.0f;
-                        bossBullet.setPosition(MARGIN + c * CELL_SIZE + xOffset, MARGIN + r * CELL_SIZE);
+                        bossBullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bossBullet);
                     }
                 }
+            }
+
+            // Draw shield powerups from separate array
+            for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
+            {
+                if (shieldPowerupActive[i])
+                {
+                    shieldPowerUp.setPosition(MARGIN + shieldPowerupCol[i] * CELL_SIZE, MARGIN + shieldPowerupRow[i] * CELL_SIZE);
+                    window.draw(shieldPowerUp);
+                }
+            }
+
+            // Draw Shield over spaceship if active
+            if (hasShield)
+            {
+                // Center shield over spaceship position
+                shieldIcon.setPosition(MARGIN + spaceshipCol * CELL_SIZE + SHIELD_OFFSET, MARGIN + (ROWS - 1) * CELL_SIZE + SHIELD_OFFSET);
+                window.draw(shieldIcon);
             }
 
             // Draw Active Hit Effects
@@ -1689,16 +2301,28 @@ int main()
             sprintf(scoreBuffer, "Score: %d", score);
             scoreText.setString(scoreBuffer);
 
+            // Draw UI: Kills
+            char killsBuffer[50];
+            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);
+            killsText.setString(killsBuffer);
+
             // Draw UI: Level
             char levelBuffer[20];
             sprintf(levelBuffer, "Level: %d", level);
             levelText.setString(levelBuffer);
 
+            // Draw UI: High Score
+            char highScoreBuffer[50];
+            sprintf(highScoreBuffer, "High Score: %d", highScore);
+            highScoreText.setString(highScoreBuffer);
+
             // Render UI elements
             window.draw(title);
             window.draw(livesText);
             window.draw(scoreText);
+            window.draw(killsText);
             window.draw(levelText);
+            window.draw(highScoreText);
         }
         else if (currentState == STATE_LEVEL_UP)
         {
@@ -1720,7 +2344,15 @@ int main()
             char levelBuffer[20];
             sprintf(levelBuffer, "Level: %d", level);
             levelText.setString(levelBuffer);
+
+            char killsBuffer[50];
+            sprintf(killsBuffer, "Kills: %d/%d", killCount, level * 10);
+            killsText.setString(killsBuffer);
+
             window.draw(title);
+            window.draw(livesText);
+            window.draw(scoreText);
+            window.draw(killsText);
             window.draw(levelText);
         }
         else if (currentState == STATE_PAUSED)
@@ -1746,9 +2378,7 @@ int main()
                     }
                     else if (grid[r][c] == 3)
                     { // Bullet
-                        float bulletWidth = CELL_SIZE * 0.3f;
-                        float xOffset = (CELL_SIZE - bulletWidth) / 2.0f;
-                        bullet.setPosition(MARGIN + c * CELL_SIZE + xOffset, MARGIN + r * CELL_SIZE);
+                        bullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bullet);
                     }
                     else if (grid[r][c] == 4)
@@ -1763,9 +2393,7 @@ int main()
                     }
                     else if (grid[r][c] == 6)
                     { // Boss Bullet
-                        float bulletWidth = CELL_SIZE * 0.3f;
-                        float xOffset = (CELL_SIZE - bulletWidth) / 2.0f;
-                        bossBullet.setPosition(MARGIN + c * CELL_SIZE + xOffset, MARGIN + r * CELL_SIZE);
+                        bossBullet.setPosition(MARGIN + c * CELL_SIZE + BULLET_OFFSET_X, MARGIN + r * CELL_SIZE);
                         window.draw(bossBullet);
                     }
                 }
@@ -1798,6 +2426,13 @@ int main()
             window.draw(menuBackground);
             window.draw(victoryTitle);
 
+            // Update and draw score
+            char victoryScoreBuffer[50];
+            sprintf(victoryScoreBuffer, "Final Score: %d", score);
+            victoryScore.setString(victoryScoreBuffer);
+            victoryScore.setPosition(windowWidth / 2 - victoryScore.getLocalBounds().width / 2.0f, 200);
+            window.draw(victoryScore);
+
             // Draw menu items
             for (int i = 0; i < 2; i++)
             {
@@ -1820,6 +2455,13 @@ int main()
             window.draw(menuBackground);
             window.draw(gameOverTitle);
 
+            // Update and draw score
+            char gameOverScoreBuffer[50];
+            sprintf(gameOverScoreBuffer, "Final Score: %d", score);
+            gameOverScore.setString(gameOverScoreBuffer);
+            gameOverScore.setPosition(windowWidth / 2 - gameOverScore.getLocalBounds().width / 2.0f, 200);
+            window.draw(gameOverScore);
+
             // Draw menu items
             for (int i = 0; i < 2; i++)
             {
@@ -1838,7 +2480,6 @@ int main()
         }
 
         window.display();
-        sleep(milliseconds(50)); // Small delay to control game speed
     }
 
     return 0;
