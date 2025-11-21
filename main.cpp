@@ -543,15 +543,15 @@ int main()
     playerDesc.setFillColor(Color::White);
     playerDesc.setPosition(120, 290);
 
-    Text meteorDesc("Meteor - Avoid!", font, 18);
+    Text meteorDesc("Meteor - 1 Point (Avoid collision!)", font, 18);
     meteorDesc.setFillColor(Color::White);
     meteorDesc.setPosition(120, 330);
 
-    Text enemyDesc("Enemy - 3 Points", font, 18);
+    Text enemyDesc("Enemy - 3 Points (Avoid collision!)", font, 18);
     enemyDesc.setFillColor(Color::White);
     enemyDesc.setPosition(120, 370);
 
-    Text bossDesc("Boss - 5 Points (Level 3+)", font, 18);
+    Text bossDesc("Boss - 5 Points (Level 3+) (Avoid collision!)", font, 18);
     bossDesc.setFillColor(Color::White);
     bossDesc.setPosition(120, 410);
 
@@ -563,7 +563,7 @@ int main()
     bossBulletDesc.setFillColor(Color::White);
     bossBulletDesc.setPosition(120, 490);
 
-    Text lifeDesc("Life Icon", font, 18);
+    Text lifeDesc("Life Icon - Indicates remaining lives", font, 18);
     lifeDesc.setFillColor(Color::White);
     lifeDesc.setPosition(120, 530);
 
@@ -571,26 +571,43 @@ int main()
     shieldPowerupDesc.setFillColor(Color::White);
     shieldPowerupDesc.setPosition(120, 570);
 
+    // Game Systems Section
+    Text systemsTitle("GAME SYSTEMS", font, 24);
+    systemsTitle.setFillColor(Color::Cyan);
+    systemsTitle.setPosition(50, 620);
+
+    Text livesDesc("Lives: You start with 3 lives. Lose one when hit any enemy.", font, 18);
+    livesDesc.setFillColor(Color::White);
+    livesDesc.setPosition(50, 660);
+
+    Text levelsDesc("Levels: Destroy 10 enemies/bosses per level to advance.", font, 18);
+    levelsDesc.setFillColor(Color::White);
+    levelsDesc.setPosition(50, 690);
+
+    Text highScoreDesc("High Score: Your best score is saved automatically.", font, 18);
+    highScoreDesc.setFillColor(Color::White);
+    highScoreDesc.setPosition(50, 720);
+
     // Objective Section
     Text objectiveTitle("OBJECTIVE", font, 24);
     objectiveTitle.setFillColor(Color::Cyan);
-    objectiveTitle.setPosition(50, 620);
+    objectiveTitle.setPosition(50, 770);
 
-    Text objective1("- Destroy enemies (3 pts) and bosses (5 pts)", font, 18);
+    Text objective1("- Destroy enemies and bosses", font, 18);
     objective1.setFillColor(Color::White);
-    objective1.setPosition(50, 660);
+    objective1.setPosition(50, 810);
 
-    Text objective2("- Destroy meteors for 1-2 bonus points", font, 18);
+    Text objective2("- Do not lose all your lives", font, 18);
     objective2.setFillColor(Color::White);
-    objective2.setPosition(50, 690);
+    objective2.setPosition(50, 840);
 
-    Text objective3("- Each level: Destroy (Level x 10) enemies/bosses", font, 18);
+    Text objective3("- Complete Level 5 to win!", font, 18);
     objective3.setFillColor(Color::White);
-    objective3.setPosition(50, 720);
+    objective3.setPosition(50, 870);
 
-    Text objective4("- Complete Level 5 to win! Don't lose 3 lives!", font, 18);
+    Text objective4("", font, 18);
     objective4.setFillColor(Color::White);
-    objective4.setPosition(50, 750);
+    objective4.setPosition(50, 900);
 
     Text instructionsBack("Press ESC or BACKSPACE to return to menu", font, 18);
     instructionsBack.setFillColor(Color(150, 150, 150));
@@ -1147,25 +1164,8 @@ int main()
                             continue;
                         }
 
-                        // Move down
+                        // Move down (straight, no horizontal movement)
                         shieldPowerupRow[i]++;
-
-                        // Random horizontal movement (zigzag)
-                        int randomMove = rand() % 3; // 0=left, 1=stay, 2=right
-                        if (randomMove == 0 && shieldPowerupCol[i] > 0)
-                        {
-                            shieldPowerupCol[i]--; // Move left
-                            shieldPowerupDirection[i] = -1;
-                        }
-                        else if (randomMove == 2 && shieldPowerupCol[i] < COLS - 1)
-                        {
-                            shieldPowerupCol[i]++; // Move right
-                            shieldPowerupDirection[i] = 1;
-                        }
-                        else
-                        {
-                            shieldPowerupDirection[i] = 0; // Stay in same column
-                        }
 
                         // Check collision with spaceship AFTER moving
                         if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
@@ -2196,6 +2196,12 @@ int main()
             shieldPowerUp.setPosition(60, 565);
             window.draw(shieldPowerUp);
             window.draw(shieldPowerupDesc);
+
+            // Draw game systems section
+            window.draw(systemsTitle);
+            window.draw(livesDesc);
+            window.draw(levelsDesc);
+            window.draw(highScoreDesc);
 
             // Draw objectives
             window.draw(objectiveTitle);
