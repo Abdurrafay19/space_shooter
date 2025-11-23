@@ -52,7 +52,7 @@ int main()
     int savedScore = 0;       // Score achieved in saved game
     int savedLevel = 0;       // Level reached in saved game
     bool hasSavedGame = false; // Flag indicating if a valid saved game exists
-    string saveFile = "save-file.txt"; // Path to the save file
+    char saveFile[] = "save-file.txt"; // Path to the save file
 
     // Attempt to open and read the save file
     ifstream inputFile(saveFile);
@@ -90,7 +90,7 @@ int main()
     const int MAX_LEVEL = 5;                   // Final level number - winning the game requires completing level 5
     bool isInvincible = false;                 // Temporary invincibility flag (activated after taking damage)
     Clock invincibilityTimer;                  // Timer to track how long invincibility has been active
-    const float INVINCIBILITY_DURATION = 1.0f; // Invincibility lasts 1 second after being hit
+    const float INVINCIBILITY_DURATION = 2.0f; // Invincibility lasts 2 seconds after being hit
 
     // Level Up Effect Setup: Variables to create animated blinking text during level transitions
     Clock levelUpTimer;            // Tracks total time spent on level up screen (2 seconds)
@@ -652,7 +652,7 @@ int main()
     // Meteor description with point value
     Text meteorDesc("Meteor - 1 Point (Avoid collision!)", font, 18);
     meteorDesc.setFillColor(Color::White);
-    playerDesc.setPosition(120, 330);
+    meteorDesc.setPosition(120, 330);
 
     // Enemy UFO description with point value
     Text enemyDesc("Enemy - 3 Points (Avoid collision!)", font, 18);
@@ -1139,8 +1139,8 @@ int main()
                 enemySpawnClock.restart();  // Reset spawn timer
                 // Calculate next spawn time with level-based difficulty scaling
                 // Higher levels = shorter wait time between spawns
-                float baseTime = 2.5f - (level * 0.4f);  // Decreases with level
-                float variance = 3.0f - (level * 0.4f);  // Random variation
+                float baseTime = 2.0f - (level * 0.35f);  // Decreases with level (more aggressive)
+                float variance = 2.5f - (level * 0.35f);  // Random variation (tighter)
                 // Ensure minimum spawn time (don't go below 0.5 seconds)
                 if (baseTime < 0.5f)
                     baseTime = 0.5f;
@@ -1208,7 +1208,7 @@ int main()
 
             // Meteor Movement Logic: Move all meteors downward at level-adjusted speed
             // Speed increases with level to make game progressively harder
-            float meteorMoveSpeed = 0.833f - ((level - 1) * 0.1f);  // Base speed decreases with level
+            float meteorMoveSpeed = 0.7f - ((level - 1) * 0.12f);  // Base speed decreases with level (faster)
             if (meteorMoveSpeed < 0.333f)  // Cap minimum speed (max difficulty)
                 meteorMoveSpeed = 0.333f;
             // Check if enough time has passed to move meteors
@@ -1243,6 +1243,9 @@ int main()
                                     if (hasShield)
                                     {
                                         hasShield = false; // Shield absorbs hit and deactivates
+                                        isInvincible = true;  // Activate invincibility after shield breaks
+                                        invincibilityTimer.restart();  // Start invincibility timer
+                                        damageSound.play();  // Play damage sound for shield break
                                     }
                                     else if (!isInvincible)  // Only damage if not in invincibility period
                                     {
@@ -1331,8 +1334,10 @@ int main()
                         // (Powerup position might already overlap spaceship)
                         if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
                         {
-                            hasShield = true;  // Activate player's shield
-                            levelUpSound.play(); // Play collection sound (reuses level up sound)
+                            if (!hasShield) {  // Only collect if player doesn't have shield
+                                hasShield = true;  // Activate player's shield
+                                levelUpSound.play(); // Play collection sound (reuses level up sound)
+                            }
                             shieldPowerupActive[i] = false;  // Remove powerup
                             continue;  // Skip movement for this powerup
                         }
@@ -1344,8 +1349,10 @@ int main()
                         // (Player might now be at powerup's new position)
                         if (grid[shieldPowerupRow[i]][shieldPowerupCol[i]] == 1)
                         {
-                            hasShield = true;  // Grant shield to player
-                            levelUpSound.play(); // Sound feedback
+                            if (!hasShield) {  // Only collect if player doesn't have shield
+                                hasShield = true;  // Grant shield to player
+                                levelUpSound.play(); // Sound feedback
+                            }
                             shieldPowerupActive[i] = false;  // Remove collected powerup
                         }
                     }
@@ -1355,7 +1362,7 @@ int main()
 
             // Enemy Movement Logic: Move all enemies downward with level-based speed
             // Enemies move faster at higher levels (same speed curve as meteors)
-            float enemyMoveSpeed = 0.833f - ((level - 1) * 0.1f);  // Calculate speed based on level
+            float enemyMoveSpeed = 0.7f - ((level - 1) * 0.12f);  // Calculate speed based on level (faster)
             // Only move enemies if enough time has passed
             if (enemyMoveClock.getElapsedTime().asSeconds() >= enemyMoveSpeed)
             {
@@ -1421,6 +1428,8 @@ int main()
                                     if (hasShield)
                                     {
                                         hasShield = false; // Shield absorbs the hit and deactivates
+                                        isInvincible = true;  // Activate invincibility after shield breaks
+                                        invincibilityTimer.restart();  // Start invincibility timer
                                         explosionSound.play();  // Play explosion sound
                                     }
                                     else if (!isInvincible)  // Only damage if not in invincibility period
@@ -1624,6 +1633,8 @@ int main()
                                     if (hasShield)
                                     {
                                         hasShield = false; // Shield absorbs hit and deactivates
+                                        isInvincible = true;  // Activate invincibility after shield breaks
+                                        invincibilityTimer.restart();  // Start invincibility timer
                                         explosionSound.play();  // Play explosion sound
                                     }
                                     else if (!isInvincible)  // Only damage if not invincible
@@ -1800,6 +1811,8 @@ int main()
                                     if (hasShield)
                                     {
                                         hasShield = false; // Shield absorbs hit and deactivates
+                                        isInvincible = true;  // Activate invincibility after shield breaks
+                                        invincibilityTimer.restart();  // Start invincibility timer
                                         explosionSound.play();  // Play explosion sound
                                     }
                                     else if (!isInvincible)  // Only damage if not invincible
@@ -2494,7 +2507,7 @@ int main()
             }
 
             // Draw shield powerups from separate tracking array (not in grid)
-            // Maximum 10 shield powerups can be active simultaneously
+            // Maximum 5 shield powerups can be active simultaneously
             for (int i = 0; i < MAX_SHIELD_POWERUPS; i++)
             {
                 if (shieldPowerupActive[i])  // If this powerup exists

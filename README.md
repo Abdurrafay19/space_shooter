@@ -1,6 +1,7 @@
 # Space Shooter Game - Complete main.cpp Documentation
 
 ## Table of Contents
+0. [Installation & Setup](#installation--setup)
 1. [Architecture Overview](#architecture-overview)
 2. [Includes & Namespaces](#includes--namespaces)
 3. [Global Constants](#global-constants)
@@ -14,6 +15,59 @@
 11. [Entity Movement & Collision](#entity-movement--collision)
 12. [Rendering Pipeline](#rendering-pipeline)
 13. [How Everything Links Together](#how-everything-links-together)
+
+---
+
+## 0. Installation & Setup
+
+The project uses **CMake + SFML 2.5+** and loads assets relative to the repository root (the executable must run with the working directory set to the folder that contains `assets/` and `save-file.txt`). Pick the flow that matches your OS and IDE.
+
+### Windows + Visual Studio 2022
+1. Install **Visual Studio 2022** with the Desktop development with C++ workload (this installs MSVC, CMake, Ninja, and the debugger).
+2. Install **vcpkg** once to fetch SFML:
+    ```
+    git clone https://github.com/microsoft/vcpkg %USERPROFILE%\vcpkg
+    %USERPROFILE%\vcpkg\bootstrap-vcpkg.bat
+    %USERPROFILE%\vcpkg\vcpkg install sfml:x64-windows
+    %USERPROFILE%\vcpkg\vcpkg integrate install
+    ```
+3. Open the repo via File > Open > CMake. Visual Studio will create or reuse `CMakeSettings.json`.
+4. In the active configuration add the toolchain setting so CMake can find SFML:
+    ```json
+    "configureSettings": {
+         "CMAKE_TOOLCHAIN_FILE": "C:/Users/<you>/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    }
+    ```
+5. Select an x64 configuration, click **Generate**, then **Build**. Visual Studio places the binary under `out/build/<config>/sfml_project`.
+6. Set Debugging > Working Directory to the repository root (so `assets/` and `save-file.txt` resolve) and press **Local Windows Debugger** to run.
+
+### Windows + Visual Studio Code
+1. Install a 64-bit compiler plus build tools (either **Visual Studio Build Tools 2022** with MSVC or **MSYS2** for `g++`), then add **CMake** and **Ninja** (for example via `winget install Kitware.CMake Ninja-build`).
+2. Install **vcpkg** and fetch SFML exactly as above (`vcpkg install sfml:x64-windows`).
+3. In VS Code install the extensions **C/C++** (`ms-vscode.cpptools`) and **CMake Tools** (`ms-vscode.cmake-tools`).
+4. Open the workspace folder, press `Ctrl+Shift+P` > `CMake: Select Kit`, and pick your compiler (for example, Visual Studio 17 2022 Release - amd64).
+5. Tell CMake Tools where the vcpkg toolchain lives by adding to `.vscode/settings.json`:
+    ```json
+    "cmake.configureSettings": {
+         "CMAKE_TOOLCHAIN_FILE": "C:/Users/<you>/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    }
+    ```
+6. Run **CMake: Configure**, then **CMake: Build** (or run `cmake -S . -B build` and `cmake --build build` in the integrated terminal). Launch via **CMake: Run Without Debugging**; ensure that configuration's working directory is the repo root or copy `assets/` into `build/` before running.
+
+### Linux + Visual Studio Code (or CLI)
+1. Install dependencies (substitute your package manager as needed):
+    ```
+    sudo apt update
+    sudo apt install build-essential cmake ninja-build libsfml-dev
+    ```
+    Fedora: `sudo dnf install gcc-c++ cmake ninja-build SFML-devel`, Arch: `sudo pacman -S base-devel cmake ninja sfml`.
+2. Open the project in VS Code (locally or via Remote SSH/WSL). With CMake Tools installed, run **CMake: Configure** (select Ninja or Unix Makefiles) followed by **CMake: Build**. CLI equivalent:
+    ```
+    cmake -S . -B build -G Ninja
+    cmake --build build
+    ./build/sfml_project/sfml_project
+    ```
+3. Run from the repository root so `assets/` loads correctly. `save-file.txt` will be created automatically on first launch.
 
 ---
 
@@ -171,7 +225,7 @@ int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0};
 
 **Shield Powerup System:**
 - Independent tracking allows up to 5 simultaneous shield powerups
-- Random zigzag movement (direction: -1=left, 0=down, 1=right)
+- Currently drift straight down every 0.5s (direction slots are reserved for future patterns)
 - Collision detected by checking grid position before/after movement
 - Spawns starting at level 3+
 
@@ -221,7 +275,7 @@ bool hasSavedGame = false;        // Whether saved game data exists
 - `currentState` determines which logic block executes in the game loop
 - `lives <= 0` triggers `currentState = STATE_GAME_OVER`
 - `killCount >= level * 10` triggers level up sequence (changed from score-based)
-- `isInvincible` prevents multiple hits during the 1-second immunity window
+- `isInvincible` prevents multiple hits during the 2-second immunity window
 - `hasShield` provides one-time damage absorption before being removed
 - `highScore` persists across game sessions via save-file.txt
 
@@ -548,19 +602,31 @@ for (int r = 0; r < ROWS; r++) {  // Top-to-bottom for upward movement
                 grid[r][c] = 0;  // Clear current position
                 
                 if (grid[r - 1][c] == 4) {  // Hit enemy
-                    score += 1;
+                    score += 3;
+                    killCount++;
                     grid[r - 1][c] = 0;  // Destroy both
                     
-                    // Check for level up
-                    if (score >= level * 10) {
-                        level++;
-                        // Clear grid, reset score
+                    // Check for progression using killCount
+                    if (level < MAX_LEVEL && killCount >= level * 10) {
+                        // Clear grid, recenter ship, blink LEVEL UP
                         currentState = STATE_LEVEL_UP;
+                    }
+                    else if (level >= MAX_LEVEL && killCount >= level * 10) {
+                        currentState = STATE_VICTORY;
                     }
                 }
                 else if (grid[r - 1][c] == 5) {  // Hit boss
-                    score += 3;  // Bosses worth more
-                    // Same level up logic
+                    score += 5;  // Bosses worth more
+                    killCount++;
+                    grid[r - 1][c] = 0;
+                    
+                    // Same level-up or victory logic as above
+                    if (level < MAX_LEVEL && killCount >= level * 10) {
+                        currentState = STATE_LEVEL_UP;
+                    }
+                    else if (level >= MAX_LEVEL && killCount >= level * 10) {
+                        currentState = STATE_VICTORY;
+                    }
                 }
             }
         }
@@ -764,15 +830,15 @@ STATE_PLAYING Logic Flow (executed every frame):
       └─ For each bullet: Move up, check enemy/boss collision, level up logic
 
 4. EFFECT UPDATES
-   ├─ Update hit effect timers
-   │  └─ Deactivate effects after 0.3 seconds
-   └─ Update invincibility timer
-      └─ Set isInvincible = false after 1.0 second
+    ├─ Update hit effect timers
+    │  └─ Deactivate effects after 0.3 seconds
+    └─ Update invincibility timer
+        └─ Set isInvincible = false after 2.0 seconds
 
 5. STATE TRANSITIONS
-   ├─ If lives <= 0 → currentState = STATE_GAME_OVER
-   ├─ If score >= level * 10 → currentState = STATE_LEVEL_UP
-   └─ If level >= MAX_LEVEL && score >= threshold → currentState = STATE_VICTORY
+    ├─ If lives <= 0 → currentState = STATE_GAME_OVER
+    ├─ If level < MAX_LEVEL && killCount >= level * 10 → currentState = STATE_LEVEL_UP
+    └─ If level >= MAX_LEVEL && killCount >= level * 10 → currentState = STATE_VICTORY
 ```
 
 ### Data Flow: How Grid Changes Affect Everything
@@ -1017,7 +1083,7 @@ grid[ROWS][COLS] (Core Game State)
 shieldPowerup Arrays (Independent System)
     ├─ Tracks: Up to 5 simultaneous shield powerups
     ├─ Modified by: Spawning (level 3+), Movement (0.5s intervals), Collection
-    ├─ Movement: Random zigzag (direction: -1/0/1)
+    ├─ Movement: Straight down every 0.5s (direction array kept for future zigzag logic)
     ├─ Collision: Checked against grid position before/after movement
     └─ Cleared on: Game start, Level up, Load saved game
 
@@ -1028,7 +1094,7 @@ hasShield
 
 isInvincible
     ├─ Set true on: Any damage (after shield check)
-    ├─ Set false after: 1 second (invincibilityTimer)
+    ├─ Set false after: 2 seconds (invincibilityTimer)
     └─ Affects: Damage prevention, Rendering (blink effect)
 
 highScore (Persistent)
@@ -1068,7 +1134,7 @@ The game is a **state-driven, grid-based arcade shooter** with **persistent save
    - Spawn rates increase exponentially
    - Movement speeds up through mathematical formulas
    - Boss firing frequency increases (level 3: 1/5, level 4: 1/4, level 5: 1/3)
-   - Shield powerups spawn (level 3+) with random zigzag movement
+    - Shield powerups spawn (level 3+) and fall straight down every 0.5s
 
 7. **New scoring system separates progression from points**:
    - `killCount` tracks enemies/bosses for level progression (10 per level)
