@@ -1322,7 +1322,7 @@ This project uses the following third-party resources:
 - Website: https://www.sfml-dev.org/
 
 **Font and Graphics Assets**
-- Sourced from: opengameart.org fonts.google.com
+- Sourced from: opengameart.org
 
 ---
 
