@@ -1,182 +1,1129 @@
-# Space Shooter Game - Complete main.cpp Documentation
+# 🚀 Space Shooter Game
 
-## Table of Contents
-0. [Installation & Setup](#installation--setup)
-1. [Architecture Overview](#architecture-overview)
-2. [Includes & Namespaces](#includes--namespaces)
-3. [Global Constants](#global-constants)
-4. [The main() Function Deep Dive](#the-main-function-deep-dive)
-5. [Core Data Structures](#core-data-structures)
-6. [Asset Loading System](#asset-loading-system)
-7. [Game State Machine](#game-state-machine)
-8. [Timing System](#timing-system)
-9. [The Game Loop](#the-game-loop)
-10. [State-Specific Logic](#state-specific-logic)
-11. [Entity Movement & Collision](#entity-movement--collision)
-12. [Rendering Pipeline](#rendering-pipeline)
-13. [How Everything Links Together](#how-everything-links-together)
+<div align="center">
+
+![Space Shooter](https://img.shields.io/badge/Game-Space%20Shooter-blue)
+![Language](https://img.shields.io/badge/Language-C++-00599C?logo=cplusplus)
+![Framework](https://img.shields.io/badge/Framework-SFML%202.5-8CC445)
+![Build System](https://img.shields.io/badge/Build-CMake-064F8C?logo=cmake)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+**A classic arcade-style space shooter game built with C++ and SFML**
+
+[Features](#features) • [Installation](#installation) • [How to Play](#how-to-play) • [Game Mechanics](#game-mechanics) • [Documentation](#documentation)
+
+</div>
 
 ---
 
-## 0. Installation & Setup
+## 📋 Table of Contents
 
-The project uses **CMake + SFML 2.5+** and loads assets relative to the repository root (the executable must run with the working directory set to the folder that contains `assets/` and `save-file.txt`). Pick the flow that matches your OS and IDE.
+- [Overview](#overview)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+  - [Linux Installation](#linux-installation)
+  - [Windows Installation](#windows-installation)
+  - [macOS Installation](#macos-installation)
+- [Building from Source](#building-from-source)
+- [How to Play](#how-to-play)
+  - [Controls](#controls)
+  - [Game Objectives](#game-objectives)
+- [Game Mechanics](#game-mechanics)
+  - [Entities](#entities)
+  - [Power-ups](#power-ups)
+  - [Scoring System](#scoring-system)
+  - [Level Progression](#level-progression)
+- [Game States](#game-states)
+- [Technical Architecture](#technical-architecture)
+  - [Grid System](#grid-system)
+  - [Game Loop](#game-loop)
+  - [Collision Detection](#collision-detection)
+  - [Asset Management](#asset-management)
+- [Code Structure](#code-structure)
+- [Save System](#save-system)
+- [Audio System](#audio-system)
+- [Advanced Features](#advanced-features)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Future Enhancements](#future-enhancements)
+- [Contributing](#contributing)
+- [License](#license)
+- [Credits](#credits)
 
-### Windows + Visual Studio 2022
-1. Install **Visual Studio 2022** with the Desktop development with C++ workload (this installs MSVC, CMake, Ninja, and the debugger).
-2. Install **vcpkg** once to fetch SFML:
-    ```
-    git clone https://github.com/microsoft/vcpkg %USERPROFILE%\vcpkg
-    %USERPROFILE%\vcpkg\bootstrap-vcpkg.bat
-    %USERPROFILE%\vcpkg\vcpkg install sfml:x64-windows
-    %USERPROFILE%\vcpkg\vcpkg integrate install
-    ```
-3. Open the repo via File > Open > CMake. Visual Studio will create or reuse `CMakeSettings.json`.
-4. In the active configuration add the toolchain setting so CMake can find SFML:
-    ```json
-    "configureSettings": {
-         "CMAKE_TOOLCHAIN_FILE": "C:/Users/<you>/vcpkg/scripts/buildsystems/vcpkg.cmake"
+---
+
+## 🎮 Overview
+
+**Space Shooter** is a classic arcade-style game developed in C++ using the SFML (Simple and Fast Multimedia Library) framework. Players control a spaceship at the bottom of the screen, defending against waves of meteorites, enemy UFOs, and powerful boss ships while progressing through increasingly challenging levels.
+
+The game features a robust save system, multiple game states, power-ups, visual effects, immersive sound design, and a progressive difficulty curve that keeps players engaged. With 5 challenging levels to conquer, players must master both offense and defense to achieve victory.
+
+### Key Highlights
+
+- **5 Progressive Levels**: Each level increases in difficulty with faster enemies and more aggressive spawning
+- **Multiple Enemy Types**: Face meteors, UFOs, and powerful boss enemies with unique behaviors
+- **Power-up System**: Collect shield power-ups for protection (available from Level 3+)
+- **Boss Battles**: Starting from Level 3, boss enemies can shoot back at you
+- **Save/Load System**: Save your progress and resume later
+- **High Score Tracking**: Compete with yourself to beat your best score
+- **Immersive Audio**: Background music and sound effects for all actions
+- **Visual Effects**: Explosion animations and hit effects for satisfying gameplay
+- **Responsive Controls**: Smooth keyboard-based movement and shooting
+
+---
+
+## ✨ Features
+
+### Core Gameplay
+- **Player-Controlled Spaceship**: Move left and right to dodge enemies and position shots
+- **Shooting Mechanics**: Fire bullets to destroy incoming threats
+- **Enemy Variety**: Three types of enemies with different point values and behaviors
+- **Boss Enemies**: Powerful foes that shoot projectiles (Level 3+)
+- **Progressive Difficulty**: Each level increases speed and spawn rates
+- **Life System**: Start with 3 lives; lose one when hit by enemies or projectiles
+- **Invincibility Frames**: 2-second invincibility after taking damage
+
+### Game Systems
+- **5 Levels to Complete**: Each requiring 10 kills to advance
+- **High Score Persistence**: Your best score is saved automatically
+- **Save/Load Functionality**: Save your progress mid-game and return later
+- **Shield Power-ups**: Protective shields that absorb one hit (Level 3+)
+- **Real-time Score Tracking**: Points awarded for destroying different enemy types
+- **Kill Counter**: Track progress toward the next level
+
+### Visual & Audio
+- **Sprite-Based Graphics**: Custom textures for all game entities
+- **Animated Effects**: Explosion effects when enemies are destroyed
+- **Background Music**: Looping soundtrack for immersive experience
+- **Sound Effects**: Unique sounds for shooting, explosions, damage, level-up, and UI interactions
+- **Multiple Backgrounds**: Different visuals for menus and gameplay
+- **Visual Feedback**: Blinking effects for invincibility and level transitions
+
+### User Interface
+- **Main Menu**: Start new game, load saved game, view instructions, or exit
+- **Instructions Screen**: Comprehensive guide on controls and gameplay
+- **Pause Menu**: Pause mid-game to resume, restart, or save and quit
+- **Game Over Screen**: Shows final score with options to restart or return to menu
+- **Victory Screen**: Celebrate completing all 5 levels
+- **HUD Display**: Shows lives (icons), score, kill count, level, and high score
+
+---
+
+## 📸 Screenshots
+
+### Main Menu
+The main menu features a starry background with options to start a new game, load a saved game, view instructions, or exit. The high score is prominently displayed.
+
+### Gameplay
+The game field is a grid-based arena where the player's ship appears at the bottom. Enemies spawn from the top and move downward. The right panel displays game statistics including lives (shown as heart icons), current score, kills required for next level, current level, and high score.
+
+### Instructions Screen
+A comprehensive help screen shows all controls, entity descriptions with visual examples, and game system explanations.
+
+### Boss Battle
+Starting from Level 3, powerful boss ships appear and can fire green projectiles at the player, adding an extra layer of challenge.
+
+---
+
+## 💻 System Requirements
+
+### Minimum Requirements
+- **Operating System**: Linux, Windows 10/11, or macOS 10.15+
+- **Processor**: 1.5 GHz dual-core processor
+- **Memory**: 512 MB RAM
+- **Graphics**: OpenGL 2.0 compatible graphics card
+- **Storage**: 100 MB available space
+- **Additional**: Speakers or headphones for audio
+
+### Recommended Requirements
+- **Operating System**: Linux (Ubuntu 20.04+), Windows 10/11, or macOS 11+
+- **Processor**: 2.0 GHz quad-core processor
+- **Memory**: 1 GB RAM
+- **Graphics**: Dedicated graphics card with OpenGL 3.0 support
+- **Storage**: 200 MB available space
+
+### Dependencies
+- **SFML 2.5+**: Simple and Fast Multimedia Library
+- **CMake 3.10+**: Build system generator
+- **C++17 Compatible Compiler**: GCC 7+, Clang 5+, or MSVC 2017+
+- **OpenGL**: For rendering
+
+---
+
+## 🔧 Installation
+
+### Linux Installation
+
+#### Ubuntu/Debian-based Systems
+
+1. **Install Dependencies**:
+```bash
+sudo apt update
+sudo apt install build-essential cmake
+sudo apt install libsfml-dev
+```
+
+2. **Clone the Repository**:
+```bash
+git clone https://github.com/Abdurrafay19/pf_project.git
+cd pf_project
+```
+
+3. **Build the Project**:
+```bash
+mkdir -p build
+cd build
+cmake ..
+cmake --build .
+```
+
+4. **Run the Game**:
+```bash
+./sfml_project
+```
+
+#### Arch Linux
+
+1. **Install Dependencies**:
+```bash
+sudo pacman -S base-devel cmake sfml
+```
+
+2. **Clone and Build**:
+```bash
+git clone https://github.com/Abdurrafay19/pf_project.git
+cd pf_project
+mkdir -p build && cd build
+cmake .. && cmake --build .
+./sfml_project
+```
+
+#### Fedora/RHEL-based Systems
+
+1. **Install Dependencies**:
+```bash
+sudo dnf install gcc-c++ cmake
+sudo dnf install SFML-devel
+```
+
+2. **Follow the build steps** as shown in Ubuntu section
+
+### Windows Installation
+
+#### Using MinGW-w64
+
+1. **Install Required Tools**:
+   - Download and install [MinGW-w64](https://www.mingw-w64.org/)
+   - Download and install [CMake](https://cmake.org/download/)
+   - Add both to your system PATH
+
+2. **Install SFML**:
+   - Download SFML 2.5+ for MinGW from [SFML Downloads](https://www.sfml-dev.org/download.php)
+   - Extract to `C:\SFML`
+
+3. **Clone the Repository**:
+```cmd
+git clone https://github.com/Abdurrafay19/pf_project.git
+cd pf_project
+```
+
+4. **Build with CMake**:
+```cmd
+mkdir build
+cd build
+cmake .. -G "MinGW Makefiles" -DSFML_DIR=C:\SFML\lib\cmake\SFML
+cmake --build .
+```
+
+5. **Run the Game**:
+```cmd
+sfml_project.exe
+```
+
+#### Using Visual Studio
+
+1. **Install Visual Studio 2019 or later** with C++ development tools
+2. **Install SFML** for Visual Studio from the official website
+3. **Open CMake GUI** and configure the project
+4. **Generate Visual Studio solution** and build
+
+### macOS Installation
+
+1. **Install Homebrew** (if not already installed):
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+2. **Install Dependencies**:
+```bash
+brew install cmake sfml
+```
+
+3. **Clone and Build**:
+```bash
+git clone https://github.com/Abdurrafay19/pf_project.git
+cd pf_project
+mkdir -p build && cd build
+cmake .. && cmake --build .
+./sfml_project
+```
+
+---
+
+## 🏗️ Building from Source
+
+### Prerequisites
+- CMake 3.10 or higher
+- C++17 compatible compiler
+- SFML 2.5 or higher
+
+### Build Process
+
+1. **Clone the repository**:
+```bash
+git clone https://github.com/Abdurrafay19/pf_project.git
+cd pf_project
+```
+
+2. **Create build directory**:
+```bash
+mkdir -p build
+cd build
+```
+
+3. **Generate build files**:
+```bash
+cmake ..
+```
+
+4. **Compile the project**:
+```bash
+cmake --build .
+```
+
+5. **Run the executable**:
+```bash
+./sfml_project  # Linux/macOS
+sfml_project.exe  # Windows
+```
+
+### CMake Build Options
+
+The project uses a simple CMakeLists.txt that:
+- Sets C++17 as the standard
+- Finds and links SFML components (graphics, window, system, audio)
+- Copies the assets folder to the build directory automatically
+- Creates the executable `sfml_project`
+
+### Directory Structure After Build
+```
+pf_project/
+├── build/
+│   ├── sfml_project        # Executable
+│   ├── assets/             # Copied from source
+│   └── ...                 # Build files
+├── assets/                 # Source assets
+├── main.cpp                # Source code
+├── CMakeLists.txt          # Build configuration
+└── README.md               # This file
+```
+
+---
+
+## 🎯 How to Play
+
+### Controls
+
+#### Spaceship Movement
+- **Move Left**: `A` or `Left Arrow`
+- **Move Right**: `D` or `Right Arrow`
+- **Shoot**: `Spacebar`
+- **Pause Game**: `P`
+
+#### Menu Navigation
+- **Navigate Up**: `W` or `Up Arrow`
+- **Navigate Down**: `S` or `Down Arrow`
+- **Select Option**: `Enter`
+- **Back (Instructions)**: `Escape` or `Backspace`
+
+### Game Objectives
+
+1. **Survive**: Avoid collisions with meteors, enemies, and boss bullets
+2. **Destroy Enemies**: Shoot down meteors, UFOs, and bosses to earn points
+3. **Level Up**: Destroy 10 enemies per level to progress
+4. **Complete All Levels**: Beat Level 5 to achieve victory
+5. **Set High Scores**: Compete with yourself to beat your best score
+
+### Starting the Game
+
+1. **Launch the Game**: Run the executable
+2. **Main Menu Options**:
+   - **Start Game**: Begin a new game from Level 1 with 3 lives
+   - **Load Saved Game**: Continue from your last saved progress
+   - **Instructions**: View detailed gameplay instructions
+   - **Exit**: Close the game
+
+### During Gameplay
+
+- **Movement**: Your spaceship can only move left and right along the bottom row
+- **Shooting**: Fire bullets upward by pressing spacebar (0.3-second cooldown)
+- **Avoiding**: Dodge incoming meteors, enemies, and boss bullets
+- **Collecting**: Fly into shield power-ups to gain protection
+- **Pausing**: Press `P` to access the pause menu
+
+### Pause Menu Options
+
+- **Resume**: Continue playing
+- **Restart**: Restart the current level
+- **Save & Quit**: Save your progress and return to main menu
+
+---
+
+## ⚙️ Game Mechanics
+
+### Entities
+
+#### Player Spaceship
+- **Lives**: Starts with 3 lives
+- **Movement Speed**: Moves one grid cell per input with 0.1-second cooldown
+- **Fire Rate**: Can shoot every 0.3 seconds
+- **Invincibility**: 2 seconds of invincibility after taking damage (blinking effect)
+- **Position**: Always at the bottom row, can move horizontally
+
+#### Meteors
+- **Point Value**: 1-2 points (random)
+- **Behavior**: Move straight down at increasing speeds per level
+- **Spawn Rate**: 1-3 second intervals (random)
+- **Speed Formula**: `0.7 - ((level - 1) * 0.12)` seconds per move, minimum 0.333s
+- **Collision**: Destroys on bullet hit; damages player on contact
+
+#### Enemy UFOs
+- **Point Value**: 3 points
+- **Kill Count**: Counts toward level progression
+- **Behavior**: Move straight down at increasing speeds
+- **Spawn Rate**: Decreases with level for more frequent spawns
+- **Speed**: Same as meteors, scales with level
+- **Collision**: Destroys on bullet hit; damages player on contact
+
+#### Boss Enemies
+- **Availability**: Level 3 and above
+- **Point Value**: 5 points
+- **Kill Count**: Counts toward level progression
+- **Behavior**: Moves down and fires projectiles at the player
+- **Firing Rate**:
+  - Level 3: Fires every 4 movements
+  - Level 4: Fires every 3 movements
+  - Level 5: Fires every 2 movements
+- **Spawn Rate**: 10-14 second intervals, decreasing with level
+- **Speed**: `0.8 - ((level - 3) * 0.1)` seconds per move, minimum 0.5s
+
+#### Boss Bullets
+- **Behavior**: Move downward very quickly (0.15s per move)
+- **Collision**: Can be destroyed by player bullets; damages player on hit
+- **Visual**: Green laser projectile
+
+#### Player Bullets
+- **Speed**: Very fast (0.05s per move)
+- **Behavior**: Move straight up
+- **Collision**: Destroys meteors, enemies, bosses, and boss bullets
+
+### Power-ups
+
+#### Shield Power-up
+- **Availability**: Level 3 and above
+- **Spawn Rate**: 
+  - Levels 3-4: 20-35 second intervals
+  - Level 5: 12-20 second intervals
+- **Effect**: Absorbs one hit from any source
+- **Visual Indicator**: Blue shield overlay on player sprite
+- **Collection**: Fly into the power-up to collect
+- **Duration**: Until hit or end of level
+
+### Scoring System
+
+| Entity | Points | Counts Toward Level Progress |
+|--------|--------|------------------------------|
+| Meteor | 1-2 (random) | ❌ No |
+| Enemy UFO | 3 | ✅ Yes |
+| Boss Enemy | 5 | ✅ Yes |
+
+**High Score**: Automatically saved when you beat your previous best
+
+### Level Progression
+
+- **Total Levels**: 5
+- **Kills Required**: 10 enemies/bosses per level
+- **Difficulty Scaling**:
+  - **Speed**: Enemies and meteors move faster each level
+  - **Spawn Rate**: Enemies spawn more frequently
+  - **Boss Introduction**: Bosses appear starting Level 3
+  - **Boss Aggression**: Bosses fire more frequently in higher levels
+  - **Power-ups**: Shield power-ups become more frequent in Level 5
+
+### Level Transition
+
+When you reach 10 kills:
+1. All entities are cleared from the screen
+2. "LEVEL UP!" message appears with blinking animation
+3. Kill counter resets to 0
+4. Player respawns at center bottom
+5. After 2 seconds, gameplay resumes with increased difficulty
+
+### Victory Condition
+
+Complete Level 5 by destroying 10 enemies/bosses to win the game.
+
+### Game Over Conditions
+
+You lose all 3 lives by:
+- Colliding with meteors
+- Colliding with enemy UFOs
+- Colliding with boss enemies
+- Being hit by boss bullets
+- Allowing enemies to reach the bottom of the screen
+
+---
+
+## 🎨 Game States
+
+The game uses a state machine with 7 distinct states:
+
+### 1. Main Menu (`STATE_MENU`)
+- **Purpose**: Entry point and navigation hub
+- **Features**:
+  - Display high score
+  - Start new game
+  - Load saved game (if available)
+  - View instructions
+  - Exit game
+- **Navigation**: Arrow keys or W/S, Enter to select
+- **Background Music**: Playing
+
+### 2. Instructions (`STATE_INSTRUCTIONS`)
+- **Purpose**: Tutorial and reference guide
+- **Content**:
+  - Control scheme
+  - Entity descriptions with visual examples
+  - Game system explanations
+  - Objective overview
+- **Exit**: ESC or Backspace to return to menu
+
+### 3. Playing (`STATE_PLAYING`)
+- **Purpose**: Main gameplay state
+- **Active Systems**:
+  - Player input handling
+  - Entity spawning and movement
+  - Collision detection
+  - Score tracking
+  - Level progression
+  - Shield power-up spawning (Level 3+)
+- **Can Pause**: Press P
+- **Background Music**: Stopped during gameplay
+
+### 4. Paused (`STATE_PAUSED`)
+- **Purpose**: Temporary game suspension
+- **Features**:
+  - Game state frozen
+  - Semi-transparent overlay
+  - Options: Resume, Restart, Save & Quit
+- **Navigation**: Arrow keys or W/S, Enter to select
+- **Game State**: All timers paused, entities frozen
+
+### 5. Level Up (`STATE_LEVEL_UP`)
+- **Purpose**: Transition between levels
+- **Duration**: 2 seconds
+- **Visual**: Blinking "LEVEL UP!" text (0.3s intervals)
+- **Behavior**:
+  - Clears all entities
+  - Resets player position
+  - Updates level counter
+  - Resets kill counter
+- **Transition**: Automatically returns to playing state
+
+### 6. Game Over (`STATE_GAME_OVER`)
+- **Purpose**: Handle player defeat
+- **Features**:
+  - Display final score
+  - Update high score if beaten
+  - Options: Restart or Main Menu
+- **Triggered**: When lives reach 0
+- **Sound**: Plays lose sound effect
+- **Save System**: Clears any saved game data
+
+### 7. Victory (`STATE_VICTORY`)
+- **Purpose**: Celebrate completion
+- **Features**:
+  - Display final score
+  - Update high score if beaten
+  - Options: Restart or Main Menu
+- **Triggered**: Complete Level 5 (50 total kills)
+- **Sound**: Plays victory sound effect
+- **Background Music**: Returns when returning to menu
+
+---
+
+## 🏗️ Technical Architecture
+
+### Grid System
+
+The game uses a 2D grid-based coordinate system for entity management:
+
+```cpp
+const int ROWS = 23;        // Vertical cells
+const int COLS = 15;        // Horizontal cells
+const int CELL_SIZE = 40;   // Pixels per cell
+const int MARGIN = 40;      // Border around grid
+```
+
+#### Grid Cell Values
+- `0`: Empty space
+- `1`: Player spaceship
+- `2`: Meteor
+- `3`: Player bullet
+- `4`: Enemy UFO
+- `5`: Boss enemy
+- `6`: Boss bullet
+
+#### Advantages
+- **Simplified Collision**: Check grid cell values instead of complex calculations
+- **Predictable Movement**: Entities move one cell at a time
+- **Easy Debugging**: Visual grid structure matches code structure
+- **Memory Efficient**: Small 2D integer array
+
+### Game Loop
+
+The main game loop follows the standard pattern:
+
+```cpp
+while (window.isOpen()) {
+    // 1. Event Handling
+    while (window.pollEvent(event)) {
+        // Handle window close
     }
-    ```
-5. Select an x64 configuration, click **Generate**, then **Build**. Visual Studio places the binary under `out/build/<config>/sfml_project`.
-6. Set Debugging > Working Directory to the repository root (so `assets/` and `save-file.txt` resolve) and press **Local Windows Debugger** to run.
+    
+    // 2. Update Logic (based on current state)
+    // - Player input
+    // - Entity movement
+    // - Collision detection
+    // - Score updates
+    // - State transitions
+    
+    // 3. Rendering
+    window.clear();
+    // Draw all sprites based on grid state
+    window.display();
+}
+```
 
-### Windows + Visual Studio Code
-1. Install a 64-bit compiler plus build tools (either **Visual Studio Build Tools 2022** with MSVC or **MSYS2** for `g++`), then add **CMake** and **Ninja** (for example via `winget install Kitware.CMake Ninja-build`).
-2. Install **vcpkg** and fetch SFML exactly as above (`vcpkg install sfml:x64-windows`).
-3. In VS Code install the extensions **C/C++** (`ms-vscode.cpptools`) and **CMake Tools** (`ms-vscode.cmake-tools`).
-4. Open the workspace folder, press `Ctrl+Shift+P` > `CMake: Select Kit`, and pick your compiler (for example, Visual Studio 17 2022 Release - amd64).
-5. Tell CMake Tools where the vcpkg toolchain lives by adding to `.vscode/settings.json`:
-    ```json
-    "cmake.configureSettings": {
-         "CMAKE_TOOLCHAIN_FILE": "C:/Users/<you>/vcpkg/scripts/buildsystems/vcpkg.cmake"
-    }
-    ```
-6. Run **CMake: Configure**, then **CMake: Build** (or run `cmake -S . -B build` and `cmake --build build` in the integrated terminal). Launch via **CMake: Run Without Debugging**; ensure that configuration's working directory is the repo root or copy `assets/` into `build/` before running.
+**Frame Rate**: Locked at 60 FPS for consistent gameplay
 
-### Linux + Visual Studio Code (or CLI)
-1. Install dependencies (substitute your package manager as needed):
-    ```
-    sudo apt update
-    sudo apt install build-essential cmake ninja-build libsfml-dev
-    ```
-    Fedora: `sudo dnf install gcc-c++ cmake ninja-build SFML-devel`, Arch: `sudo pacman -S base-devel cmake ninja sfml`.
-2. Open the project in VS Code (locally or via Remote SSH/WSL). With CMake Tools installed, run **CMake: Configure** (select Ninja or Unix Makefiles) followed by **CMake: Build**. CLI equivalent:
-    ```
-    cmake -S . -B build -G Ninja
-    cmake --build build
-    ./build/sfml_project/sfml_project
-    ```
-3. Run from the repository root so `assets/` loads correctly. `save-file.txt` will be created automatically on first launch.
+### Collision Detection
 
----
+#### Grid-Based Collision
+The game uses grid cell checking for collision detection:
 
-## 1. Architecture Overview
+1. **Entity Movement**: When an entity tries to move to a new cell, check the destination
+2. **Cell Value Check**: Read the grid value at destination
+3. **Collision Resolution**: Based on the entity types involved
 
-The game uses a **monolithic procedural architecture** where all code resides in a single `main()` function. This design pattern is common for small arcade-style games and makes the flow explicit and easy to follow.
+#### Collision Matrix
 
-**Key Design Principles:**
-- **State Machine Pattern**: The game switches between different states (Menu, Playing, Paused, etc.)
-- **Grid-Based World**: All entities exist in a 2D integer array representing the game world
-- **Frame-Based Updates**: Logic executes every frame (60 FPS)
-- **Immediate Mode Rendering**: The entire screen is redrawn each frame based on current state
+| Moving Entity | Target Entity | Result |
+|--------------|---------------|---------|
+| Meteor | Player | Damage player, clear meteor |
+| Meteor | Bullet | +1-2 score, clear both |
+| Enemy | Player | Damage player, clear enemy |
+| Enemy | Bullet | +3 score, +1 kill, clear both |
+| Boss | Player | Damage player, clear boss |
+| Boss | Bullet | +5 score, +1 kill, clear both |
+| Boss Bullet | Player | Damage player, clear bullet |
+| Boss Bullet | Bullet | Clear both bullets |
 
----
+#### Shield Protection
+When player has shield active:
+1. Collision occurs normally
+2. Shield is removed instead of life
+3. Player gains 2s invincibility
+4. Shield visual disappears
 
-## 2. Includes & Namespaces
+### Asset Management
+
+#### Texture Loading
+All textures are loaded at game startup:
 
 ```cpp
-#include <SFML/Graphics.hpp>  // Core SFML graphics library
-#include <SFML/Audio.hpp>     // SFML audio library for sound effects and music
-#include <iostream>            // For error output (cerr)
-#include <fstream>             // For file I/O (save file handling)
-#include <cstdlib>             // For rand() and srand()
-#include <ctime>               // For time() to seed random generator
-using namespace std;           // Standard library namespace
-using namespace sf;            // SFML namespace
+Texture texture;
+if (!texture.loadFromFile("path/to/texture.png")) {
+    cerr << "Failed to load texture" << endl;
+    return -1;
+}
 ```
 
-**Why these includes:**
-- `SFML/Graphics.hpp`: Provides window management, rendering, textures, sprites, text, and input handling
-- `SFML/Audio.hpp`: Provides music and sound effect playback capabilities
-- `iostream`: Used for `cerr` statements to report critical errors (texture/sound loading failures)
-- `fstream`: Used for reading and writing save-file.txt (high score and game state persistence)
-- `cstdlib` & `ctime`: Random number generation for spawning entities at unpredictable positions
+#### Sprite Setup
+Sprites are scaled to fit grid cells:
 
----
-
-## 3. Global Constants
-
-### Grid Configuration
 ```cpp
-const int ROWS = 23;        // Vertical grid cells
-const int COLS = 15;        // Horizontal grid cells
-const int CELL_SIZE = 40;   // Each cell is 40x40 pixels
-const int MARGIN = 40;      // Border around the game grid
-const float BULLET_OFFSET_X = (CELL_SIZE - CELL_SIZE * 0.3f) / 2.0f; // Center bullets horizontally
-const float SHIELD_OFFSET = CELL_SIZE * -0.15f; // Center shield overlay
+sprite.setTexture(texture);
+sprite.setScale(
+    (CELL_SIZE * scaleX) / texture.getSize().x,
+    (CELL_SIZE * scaleY) / texture.getSize().y
+);
 ```
 
-**How they connect:**
-- Window size is calculated as: `COLS * CELL_SIZE + MARGIN * 2 + 500` (width), `ROWS * CELL_SIZE + MARGIN * 2` (height)
-- Every entity position is mapped: `pixelX = MARGIN + col * CELL_SIZE`
-- The grid acts as a coordinate system: `grid[row][col]`
-- `BULLET_OFFSET_X`: Pre-calculated offset to center bullets (width 30% of cell) in their cells
-- `SHIELD_OFFSET`: Pre-calculated offset to center shield overlay (130% of cell size) over spaceship
-
-### Game States
-```cpp
-const int STATE_MENU = 0;
-const int STATE_PLAYING = 1;
-const int STATE_INSTRUCTIONS = 2;
-const int STATE_GAME_OVER = 3;
-const int STATE_LEVEL_UP = 4;
-const int STATE_VICTORY = 5;
-const int STATE_PAUSED = 6;
+#### Asset Organization
 ```
-
-**State Machine Flow:**
-```
-STATE_MENU ←→ STATE_INSTRUCTIONS
-    ↓
-STATE_PLAYING ←→ STATE_PAUSED
-    ↓
-STATE_LEVEL_UP → (loops back to STATE_PLAYING)
-    ↓
-STATE_GAME_OVER or STATE_VICTORY → back to STATE_MENU
+assets/
+├── fonts/
+│   └── font.ttf            # UI text rendering
+├── images/
+│   ├── player.png          # Player spaceship
+│   ├── meteorSmall.png     # Meteor sprite
+│   ├── enemyUFO.png        # Enemy UFO sprite
+│   ├── enemyShip.png       # Boss sprite
+│   ├── laserRed.png        # Player bullet
+│   ├── laserRedShot.png    # Bullet hit effect
+│   ├── laserGreen.png      # Boss bullet
+│   ├── laserGreenShot.png  # Boss bullet hit effect
+│   ├── shield.png          # Shield overlay
+│   ├── shield-powerup.png  # Shield collectible
+│   ├── life.png            # Life icon
+│   ├── backgroundColor.png # Game background
+│   └── starBackground.png  # Menu background
+└── sounds/
+    ├── bg-music.mp3        # Background music
+    ├── shoot.wav           # Player shooting
+    ├── explosion.wav       # Enemy destroyed
+    ├── damage.mp3          # Player hit
+    ├── level-up.mp3        # Level complete
+    ├── powerup.wav         # Shield collected
+    ├── win.wav             # Victory sound
+    ├── lose.wav            # Game over sound
+    ├── menu-click.mp3      # Menu selection
+    └── menu-navigate.wav   # Menu navigation
 ```
 
 ---
 
-## 4. The main() Function Deep Dive
+## 📁 Code Structure
 
-### Phase 0: Save File System (Lines 38-70)
+### Main Components
+
+#### Helper Functions
+
+**Grid Management**:
 ```cpp
-string saveFile = "save-file.txt";
+void clearGrid(int grid[][15])
+void clearEntities(int grid[][15])  // Clears only entities, keeps player
+void resetSpaceship(int grid[][15], int& spaceshipCol)
+```
+
+**Game State Management**:
+```cpp
+void saveHighScoreAndGameOver(...)  // Save score and trigger game over
+void saveHighScoreAndVictory(...)   // Save score and trigger victory
+void restartAllClocks(...)          // Reset all timing clocks
+```
+
+**Visual Effects**:
+```cpp
+void createExplosionEffect(...)     // Add explosion animation
+```
+
+**UI Utilities**:
+```cpp
+void setMenuColors(...)             // Highlight selected menu item
+bool loadTexture(...)               // Safe texture loading
+void setupSprite(...)               // Configure sprite scaling
+```
+
+#### Main Function Structure
+
+1. **Initialization** (Lines 1-520):
+   - Window setup
+   - Save file handling
+   - Variable declarations
+   - Texture and sprite loading
+   - Font loading
+   - Audio setup
+   - UI text configuration
+   - Clock initialization
+
+2. **Game Loop** (Lines 521-1730):
+   - Event handling
+   - State-specific logic
+   - State-specific rendering
+   - Window display
+
+### Key Variables
+
+#### Game State
+```cpp
+int currentState = STATE_MENU;       // Current game state
+int selectedMenuItem = 0;            // Menu cursor position
+int lives = 3;                       // Player lives remaining
+int score = 0;                       // Current score
+int killCount = 0;                   // Enemies killed in current level
+int level = 1;                       // Current level (1-5)
+```
+
+#### Player State
+```cpp
+int spaceshipCol = COLS / 2;         // Player column position
+bool isInvincible = false;           // Invincibility status
+bool hasShield = false;              // Shield power-up status
+```
+
+#### Timing Clocks
+```cpp
+Clock moveClock;                     // Movement cooldown
+Clock bulletFireClock;               // Shooting cooldown
+Clock meteorSpawnClock;              // Meteor spawn timer
+Clock meteorMoveClock;               // Meteor movement timer
+Clock enemySpawnClock;               // Enemy spawn timer
+Clock enemyMoveClock;                // Enemy movement timer
+Clock bossSpawnClock;                // Boss spawn timer
+Clock bossMoveClock;                 // Boss movement timer
+Clock bossBulletMoveClock;           // Boss bullet movement timer
+Clock bulletMoveClock;               // Player bullet movement timer
+Clock shieldPowerupSpawnClock;       // Shield spawn timer
+Clock shieldPowerupMoveClock;        // Shield movement timer
+Clock invincibilityTimer;            // Invincibility duration
+Clock levelUpTimer;                  // Level transition duration
+Clock menuClock;                     // Menu input cooldown
+Clock hitEffectClock;                // Explosion effect timer
+```
+
+#### Arrays
+```cpp
+int grid[ROWS][COLS];                                    // Main game grid
+int shieldPowerupRow[MAX_SHIELD_POWERUPS];              // Shield positions
+int shieldPowerupCol[MAX_SHIELD_POWERUPS];
+bool shieldPowerupActive[MAX_SHIELD_POWERUPS];
+int hitEffectRow[MAX_HIT_EFFECTS];                      // Explosion effects
+int hitEffectCol[MAX_HIT_EFFECTS];
+float hitEffectTimer[MAX_HIT_EFFECTS];
+bool hitEffectActive[MAX_HIT_EFFECTS];
+```
+
+---
+
+## 💾 Save System
+
+### Save File Format
+
+**File**: `save-file.txt`
+**Location**: Same directory as executable
+**Format**: Space-separated integers
+
+```
+<high_score> <saved_lives> <saved_score> <saved_level>
+```
+
+**Example**:
+```
+1250 2 850 3
+```
+- High Score: 1250
+- Lives: 2
+- Score: 850
+- Level: 3
+
+### Save System Behavior
+
+#### Automatic High Score Saving
+- Triggers on game over or victory
+- Updates if current score exceeds high score
+- Always persists the best score
+
+#### Manual Progress Saving
+- Available through pause menu → "Save & Quit"
+- Saves current lives, score, and level
+- Allows resuming from exact state
+
+#### Load Behavior
+- "Load Saved Game" only available if valid save exists
+- Valid save requires: `savedLevel > 0 && savedLives > 0`
+- Loading restores lives, score, and level
+- Kill counter resets to 0 on load
+
+#### Save Clearing
+- Occurs on game over or victory
+- Sets saved game data to 0
+- Prevents loading from lost/won states
+- High score always preserved
+
+### Implementation Details
+
+**Reading Save File**:
+```cpp
 ifstream inputFile(saveFile);
 if (inputFile.is_open()) {
     inputFile >> highScore >> savedLives >> savedScore >> savedLevel;
+    inputFile.close();
+    
     if (savedLevel > 0 && savedLives > 0) {
         hasSavedGame = true;
     }
 }
 ```
-**Purpose**: Persistent data storage for high scores and saved games
-**File Format**: Space-separated integers: `highScore lives score level`
-**Features**:
-- Loads high score on startup to display in main menu
-- Detects if a valid saved game exists (level > 0, lives > 0)
-- Creates file with "0 0 0 0" if it doesn't exist
-- Enables "Load Saved Game" menu option when save data exists
 
-### Phase 1: Initialization (Lines 28-30)
+**Writing Save File**:
 ```cpp
-srand(static_cast<unsigned int>(time(0)));
+ofstream outputFile(saveFile);
+if (outputFile.is_open()) {
+    outputFile << highScore << " " << lives << " " << score << " " << level;
+    outputFile.close();
+}
 ```
-**Purpose**: Seeds the random number generator with the current timestamp
-**Impact**: Ensures meteor/enemy spawn positions are different each game session
 
-### Phase 2: Window Creation (Lines 32-37)
+**Clearing Saved Game**:
+```cpp
+ofstream outputFile(saveFile);
+if (outputFile.is_open()) {
+    outputFile << highScore << " 0 0 0";
+    outputFile.close();
+    hasSavedGame = false;
+}
+```
+
+---
+
+## 🔊 Audio System
+
+### Background Music
+
+**File**: `bg-music.mp3`
+**Behavior**:
+- Loops continuously
+- Plays on main menu, instructions, game over, and victory screens
+- Stops during active gameplay
+- Volume: 30% (low background level)
+
+**Control**:
+```cpp
+bgMusic.setLoop(true);
+bgMusic.setVolume(30);
+bgMusic.play();  // On menu screens
+bgMusic.stop();  // During gameplay
+```
+
+### Sound Effects
+
+| Sound | File | Trigger |
+|-------|------|---------|
+| Shoot | shoot.wav | Player fires bullet |
+| Explosion | explosion.wav | Enemy/meteor/boss destroyed |
+| Damage | damage.mp3 | Player takes damage |
+| Level Up | level-up.mp3 | Player advances to next level |
+| Power-up | powerup.wav | Shield collected |
+| Win | win.wav | Victory screen appears |
+| Lose | lose.wav | Game over screen appears |
+| Menu Click | menu-click.mp3 | Menu option selected |
+| Menu Navigate | menu-navigate.wav | Menu cursor moved |
+
+### Audio Architecture
+
+**Loading**:
+```cpp
+SoundBuffer shootBuffer;
+shootBuffer.loadFromFile("assets/sounds/shoot.wav");
+
+Sound shootSound;
+shootSound.setBuffer(shootBuffer);
+```
+
+**Playing**:
+```cpp
+shootSound.play();  // Fire and forget
+```
+
+**Buffer Lifetime**: All `SoundBuffer` objects persist for game lifetime to prevent loading/unloading overhead.
+
+---
+
+## 🚀 Advanced Features
+
+### Invincibility System
+
+**Purpose**: Prevent rapid consecutive damage
+**Duration**: 2 seconds after taking damage
+**Visual Feedback**: Player sprite blinks (0.1s intervals)
+
+**Implementation**:
+```cpp
+bool isInvincible = false;
+Clock invincibilityTimer;
+
+// On damage taken:
+isInvincible = true;
+invincibilityTimer.restart();
+
+// Visual blinking:
+if (!isInvincible || ((int)(invincibilityTimer.getElapsedTime().asMilliseconds() / 100) % 2 == 0)) {
+    window.draw(spaceship);
+}
+
+// Check expiration:
+if (isInvincible && invincibilityTimer.getElapsedTime().asSeconds() >= 2.0f) {
+    isInvincible = false;
+}
+```
+
+### Explosion Effects
+
+**Purpose**: Visual feedback for destroyed entities
+**Duration**: 0.3 seconds per effect
+**Max Concurrent**: 50 effects
+**Sprite**: Red/green shot sprite overlay
+
+**Effect Pool**:
+```cpp
+const int MAX_HIT_EFFECTS = 50;
+int hitEffectRow[MAX_HIT_EFFECTS];
+int hitEffectCol[MAX_HIT_EFFECTS];
+float hitEffectTimer[MAX_HIT_EFFECTS];
+bool hitEffectActive[MAX_HIT_EFFECTS];
+```
+
+**Creation**:
+```cpp
+void createExplosionEffect(int row, int col, ...) {
+    for (int i = 0; i < maxEffects; i++) {
+        if (!hitEffectActive[i]) {
+            hitEffectRow[i] = row;
+            hitEffectCol[i] = col;
+            hitEffectTimer[i] = 0.0f;
+            hitEffectActive[i] = true;
+            break;  // Use first available slot
+        }
+    }
+}
+```
+
+### Dynamic Difficulty Scaling
+
+#### Enemy Speed Formula
+```cpp
+float enemyMoveSpeed = 0.7f - ((level - 1) * 0.12f);
+if (enemyMoveSpeed < 0.333f) {
+    enemyMoveSpeed = 0.333f;  // Cap minimum
+}
+```
+
+**Level Speed Table**:
+| Level | Move Interval | Moves Per Second |
+|-------|---------------|------------------|
+| 1 | 0.70s | 1.43 |
+| 2 | 0.58s | 1.72 |
+| 3 | 0.46s | 2.17 |
+| 4 | 0.34s | 2.94 |
+| 5 | 0.33s | 3.03 |
+
+#### Spawn Rate Scaling
+```cpp
+float baseTime = 2.0f - (level * 0.35f);
+float variance = 2.5f - (level * 0.35f);
+if (baseTime < 0.5f) baseTime = 0.5f;
+if (variance < 1.0f) variance = 1.0f;
+nextEnemySpawnTime = baseTime + (rand() % (int)variance);
+```
+
+### Boss Mechanics
+
+#### Movement Pattern
+- Moves straight down like regular enemies
+- Same speed scaling as enemies
+- Can collide with player directly
+
+#### Firing System
+```cpp
+bossMoveCounter++;  // Increment on each movement
+
+float firingInterval;
+if (level == 3) firingInterval = 4;       // Fire every 4 moves
+else if (level == 4) firingInterval = 3;  // Fire every 3 moves
+else firingInterval = 2;                  // Fire every 2 moves (Level 5)
+
+if (bossMoveCounter >= firingInterval) {
+    // Spawn boss bullet below boss
+    bossMoveCounter = 0;
+}
+```
+
+#### Boss Bullet Behavior
+- Moves very fast (0.15s per cell)
+- Travels straight down
+- Can be destroyed by player bullets
+- Penetrates through meteors and enemies
+
+### Shield Power-up System
+
+**Separate from Grid**: Uses independent arrays to avoid grid collision
+**Collection**: Automatic when player overlaps
+**Effect**: Prevents next damage instance
+**Visual**: Blue shield overlay on player sprite
+**Spawn Logic**:
+```cpp
+if (level >= 3 && shieldPowerupSpawnClock.getElapsedTime().asSeconds() >= nextShieldPowerupSpawnTime) {
+    // Find empty slot
+    for (int i = 0; i < MAX_SHIELD_POWERUPS; i++) {
+        if (!shieldPowerupActive[i]) {
+            shieldPowerupRow[i] = 0;
+            shieldPowerupCol[i] = rand() % COLS;
+            shieldPowerupActive[i] = true;
+            break;
+        }
+    }
+}
+```
+
+---
+
+## ⚙️ Configuration
+
+### Gameplay Constants
+
+```cpp
+// Grid dimensions
+const int ROWS = 23;
+const int COLS = 15;
+const int CELL_SIZE = 40;
+const int MARGIN = 40;
+
+// Game balance
+const int MAX_LEVEL = 5;
+const float INVINCIBILITY_DURATION = 2.0f;
+const float HIT_EFFECT_DURATION = 0.3f;
+
+// Power-ups
+const int MAX_SHIELD_POWERUPS = 5;
+const int MAX_HIT_EFFECTS = 50;
+
+// Timing
+Time moveCooldown = milliseconds(100);       // Player movement delay
+Time bulletFireCooldown = milliseconds(300); // Shooting cooldown
+Time menuCooldown = milliseconds(200);       // Menu navigation delay
+```
+
+### Modifying Difficulty
+
+**Make Game Easier**:
+- Increase starting lives: `int lives = 5;`
+- Decrease kills needed per level: `int killsNeeded = level * 5;`
+- Increase invincibility duration: `const float INVINCIBILITY_DURATION = 3.0f;`
+- Slow down enemies: Increase base move speeds
+
+**Make Game Harder**:
+- Decrease starting lives: `int lives = 1;`
+- Increase kills needed: `int killsNeeded = level * 15;`
+- Decrease invincibility: `const float INVINCIBILITY_DURATION = 1.0f;`
+- Speed up enemies: Decrease base move speeds
+- Increase boss firing rates
+
+### Window Configuration
+
 ```cpp
 const int windowWidth = COLS * CELL_SIZE + MARGIN * 2 + 500;
 const int windowHeight = ROWS * CELL_SIZE + MARGIN * 2;
@@ -184,975 +1131,374 @@ RenderWindow window(VideoMode(windowWidth, windowHeight), "Space Shooter");
 window.setFramerateLimit(60);
 ```
 
-**Breakdown:**
-- `windowWidth`: Grid area (600px) + margins (80px) + UI panel (500px) = 1180px
-- `windowHeight`: Grid area (920px) + margins (80px) = 1000px
-- `setFramerateLimit(60)`: Caps execution to 60 FPS for consistent gameplay (removed conflicting sleep() call for optimal performance)
+**Default**: 1100x960 pixels, 60 FPS
 
 ---
 
-## 5. Core Data Structures
+## 🐛 Troubleshooting
 
-### The Grid System (Lines 91-104)
-```cpp
-int grid[ROWS][COLS] = {0};
+### Common Issues
 
-// Separate arrays for shield powerups (independent from main grid)
-const int MAX_SHIELD_POWERUPS = 5;
-int shieldPowerupRow[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
-int shieldPowerupCol[MAX_SHIELD_POWERUPS] = {-1, -1, -1, -1, -1};
-bool shieldPowerupActive[MAX_SHIELD_POWERUPS] = {false, false, false, false, false};
-int shieldPowerupDirection[MAX_SHIELD_POWERUPS] = {0, 0, 0, 0, 0};
-```
+#### Game Won't Launch
 
-**This is the heart of the game.** Every entity exists as an integer value in this 2D array:
+**Problem**: Executable doesn't start or crashes immediately
+**Solutions**:
+1. Check SFML installation:
+   ```bash
+   ldconfig -p | grep sfml  # Linux
+   ```
+2. Verify assets folder is in the same directory as executable
+3. Check console for error messages
+4. Ensure OpenGL drivers are up to date
 
-| Value | Entity Type | Behavior |
-|-------|-------------|----------|
-| 0 | Empty Space | No rendering, movement passes through |
-| 1 | Player Ship | Controlled by user, bottom row only |
-| 2 | Meteor | Falls down, destroys on contact, awards 1-2 random points |
-| 3 | Player Bullet | Moves up, destroys enemies/meteors |
-| 4 | Enemy UFO | Falls down, awards 3 points when destroyed |
-| 5 | Boss | Falls down, fires bullets, awards 5 points when destroyed |
-| 6 | Boss Bullet | Falls down, damages player |
+#### No Sound/Music
 
-**Critical Design Decisions:**
-- Only ONE entity per cell in main grid (no overlapping)
-- Shield powerups use separate array system to avoid interfering with bullets/entities
-- Collision detection is simply checking the value of the target cell
-- Movement = changing the value at one position and setting the old position to 0
+**Problem**: Game runs but no audio plays
+**Solutions**:
+1. Verify audio files exist in `assets/sounds/`
+2. Check system audio settings and volume
+3. Ensure audio device is connected
+4. On Linux, install audio backend:
+   ```bash
+   sudo apt install libopenal1
+   ```
 
-**Shield Powerup System:**
-- Independent tracking allows up to 5 simultaneous shield powerups
-- Currently drift straight down every 0.5s (direction slots are reserved for future patterns)
-- Collision detected by checking grid position before/after movement
-- Spawns starting at level 3+
+#### Missing Textures
 
-### Hit Effect System (Lines 53-58)
-```cpp
-const int MAX_HIT_EFFECTS = 50;
-int hitEffectRow[MAX_HIT_EFFECTS] = {0};
-int hitEffectCol[MAX_HIT_EFFECTS] = {0};
-float hitEffectTimer[MAX_HIT_EFFECTS] = {0.0f};
-bool hitEffectActive[MAX_HIT_EFFECTS] = {false};
-```
+**Problem**: Black rectangles or missing sprites
+**Solutions**:
+1. Verify all image files exist in `assets/images/`
+2. Check file permissions
+3. Ensure images are valid PNG format
+4. Check console for "Failed to load" messages
 
-**Purpose**: Visual feedback when entities are destroyed
-**How it works:**
-1. When a collision destroys an entity, the game finds an inactive slot in these arrays
-2. It stores the row/col position and activates the effect
-3. Each frame, timers increment
-4. After 0.3 seconds, the effect deactivates
-5. During rendering, active effects draw explosion sprites
+#### Build Errors
 
-**Linked to**: Rendering loop (lines 1655-1661) and update logic (lines 1352-1363)
+**Problem**: CMake or compilation fails
+**Solutions**:
+1. Verify SFML version (2.5 or higher required)
+2. Check CMake version (3.10+ required)
+3. Ensure C++17 compiler support
+4. Clean build directory and rebuild:
+   ```bash
+   rm -rf build
+   mkdir build && cd build
+   cmake .. && cmake --build .
+   ```
 
-### Game State Variables (Lines 71-90)
-```cpp
-int currentState = STATE_MENU;    // Controls which screen is active
-int selectedMenuItem = 0;         // Which menu option is highlighted
-int lives = 3;                    // Player health
-int score = 0;                    // Points accumulated from all sources
-int killCount = 0;                // Tracks enemies/bosses destroyed for level progression
-int level = 1;                    // Current difficulty tier
-const int MAX_LEVEL = 5;          // Win condition
-bool isInvincible = false;        // Temporary damage immunity
-Clock invincibilityTimer;         // Tracks immunity duration
-int bossMoveCounter = 0;          // Determines when bosses fire
-bool hasShield = false;           // Shield powerup status
-int highScore = 0;                // Persistent high score from save file
-bool hasSavedGame = false;        // Whether saved game data exists
-```
+#### Frame Rate Issues
 
-**New Scoring System:**
-- **Enemies**: 3 points each (contribute to killCount)
-- **Bosses**: 5 points each (contribute to killCount)
-- **Meteors**: 1-2 random points (bonus only, no killCount)
-- **Level Up Condition**: `killCount >= level * 10` (must destroy 10/20/30/40/50 enemies/bosses per level)
+**Problem**: Game runs too slow or stutters
+**Solutions**:
+1. Update graphics drivers
+2. Close background applications
+3. Check CPU usage
+4. Ensure hardware meets minimum requirements
 
-**How they interact:**
-- `currentState` determines which logic block executes in the game loop
-- `lives <= 0` triggers `currentState = STATE_GAME_OVER`
-- `killCount >= level * 10` triggers level up sequence (changed from score-based)
-- `isInvincible` prevents multiple hits during the 2-second immunity window
-- `hasShield` provides one-time damage absorption before being removed
-- `highScore` persists across game sessions via save-file.txt
+#### Save File Issues
+
+**Problem**: Can't save or load games
+**Solutions**:
+1. Check write permissions in game directory
+2. Delete corrupted `save-file.txt` and restart
+3. Manually create `save-file.txt` with content: `0 0 0 0`
+
+### Error Messages
+
+| Error | Meaning | Solution |
+|-------|---------|----------|
+| "Failed to load [asset]" | Missing asset file | Verify assets folder structure |
+| "Failed to load font" | Font file missing | Check `assets/fonts/font.ttf` exists |
+| Segmentation fault | Memory access error | Rebuild with debug symbols, check array bounds |
+| "No Saved Game Exists!" | No valid save data | Start a new game or create save manually |
+
+### Performance Optimization
+
+If experiencing performance issues:
+
+1. **Reduce Visual Effects**: Decrease `MAX_HIT_EFFECTS` constant
+2. **Lower Frame Rate**: Change `window.setFramerateLimit(30);`
+3. **Disable Music**: Comment out `bgMusic.play()` calls
+4. **Simplify Rendering**: Reduce entity count per level
 
 ---
 
-## 6. Asset Loading System
+## 🔮 Future Enhancements
 
-### Texture Loading Pattern (Lines 61-227)
-Every visual asset follows this pattern:
-```cpp
-Texture spaceshipTexture;
-if (!spaceshipTexture.loadFromFile("assets/images/player.png")) {
-    cerr << "Failed to load spaceship texture" << endl;
-    return -1;  // Exit program if asset missing
-}
-Sprite spaceship;
-spaceship.setTexture(spaceshipTexture);
-spaceship.setScale(
-    static_cast<float>(CELL_SIZE) / spaceshipTexture.getSize().x,
-    static_cast<float>(CELL_SIZE) / spaceshipTexture.getSize().y
-);
-```
+### Planned Features
 
-**Critical Concepts:**
+#### Gameplay Enhancements
+- [ ] **More Levels**: Extend to 10 levels with unique themes
+- [ ] **Boss Varieties**: Different boss types with unique attack patterns
+- [ ] **Power-up Diversity**: Health packs, double shot, rapid fire
+- [ ] **Difficulty Settings**: Easy, Normal, Hard modes
+- [ ] **Score Multipliers**: Combo system for consecutive kills
+- [ ] **Lives Power-up**: Rare collectible to gain extra life
 
-1. **Texture vs Sprite:**
-   - `Texture`: The image data loaded from disk (stored in GPU memory)
-   - `Sprite`: A drawable object that references a texture and has position/scale
+#### Visual Improvements
+- [ ] **Particle Effects**: Enhanced explosions with particle systems
+- [ ] **Animated Sprites**: Moving UFO parts, spinning meteors
+- [ ] **Background Parallax**: Multi-layer scrolling backgrounds
+- [ ] **Screen Shake**: On explosions and damage
+- [ ] **Fade Transitions**: Smooth state transitions
 
-2. **Scaling Logic:**
-   - Goal: Make sprite fit exactly in one grid cell (40x40 pixels)
-   - Formula: `scale = targetSize / originalSize`
-   - Example: If `player.png` is 64x64, scale = 40/64 = 0.625
+#### Audio Enhancements
+- [ ] **Dynamic Music**: Different tracks per level
+- [ ] **Adaptive Audio**: Music intensity based on danger level
+- [ ] **More Sound Variants**: Multiple explosion sounds
+- [ ] **Voice Lines**: Boss taunts, power-up notifications
 
-3. **Why scaling matters:**
-   - Assets have varying original sizes
-   - Grid cells are uniform (40x40)
-   - Scaling ensures visual consistency
+#### UI/UX Features
+- [ ] **Leaderboard**: Top 10 high scores with names
+- [ ] **Statistics**: Total kills, accuracy percentage, play time
+- [ ] **Achievements**: Unlock badges for milestones
+- [ ] **Customization**: Choose ship color/type
+- [ ] **Settings Menu**: Volume control, key rebinding
 
-**All loaded assets:**
-- Player ship, life icon, meteors, enemies, bosses
-- Bullets (player red, boss green) + impact effects
-- Backgrounds (game area, menu starfield)
-- Font for all text rendering
+#### Technical Improvements
+- [ ] **Config File**: External configuration for game parameters
+- [ ] **Multiple Save Slots**: Save different playthroughs
+- [ ] **Replay System**: Record and playback gameplay
+- [ ] **Mod Support**: Custom levels and assets
+- [ ] **Resolution Options**: Windowed, fullscreen, custom sizes
+- [ ] **Controller Support**: Gamepad input
 
----
+#### Multiplayer (Long-term)
+- [ ] **Local Co-op**: Two-player split-screen
+- [ ] **Competitive Mode**: Head-to-head battles
+- [ ] **Online Leaderboards**: Global high score ranking
 
-## 7. Game State Machine
+### Known Limitations
 
-### State Transitions
-
-**STATE_MENU (Lines 571-635):**
-```cpp
-if (Keyboard::isKeyPressed(Keyboard::Enter)) {
-    if (selectedMenuItem == 0) {  // Start Game
-        currentState = STATE_PLAYING;
-        // Reset all game variables
-        lives = 3; score = 0; level = 1;
-        // Clear grid, reposition spaceship
-        // Restart all clocks
-    }
-}
-```
-
-**Why reset everything:**
-- Starting a new game must wipe previous session data
-- Grid must be cleared of leftover entities
-- Timers must restart to prevent immediate spawns
-
-**STATE_PLAYING (Lines 698-1371):**
-The most complex state - handles:
-- Player input (movement, shooting, pause)
-- Entity spawning (meteors, enemies, bosses)
-- Entity movement with collision detection
-- Level progression and victory conditions
-
-**STATE_PAUSED (Lines 1455-1519):**
-```cpp
-// Draw game state in background (frozen)
-// Draw semi-transparent overlay
-// Draw pause menu on top
-```
-**Design choice**: Game remains visible but frozen, giving context to the player
+- **Single Resolution**: Fixed window size
+- **No Mobile Support**: Desktop-only (keyboard required)
+- **Limited Enemy AI**: Simple downward movement patterns
+- **Grid-Based**: Movement restricted to cells
+- **No Dodge Mechanic**: Cannot dodge through enemies
+- **One Save Slot**: Can only save one game at a time
 
 ---
 
-## 8. Timing System
+## 🤝 Contributing
 
-### Clock-Based Timing (Lines 414-436)
-SFML's `Clock` class measures elapsed time since creation or last restart.
+Contributions are welcome! Whether it's bug fixes, new features, or documentation improvements, your help is appreciated.
 
-**Movement Cooldown:**
-```cpp
-Clock moveClock;
-Time moveCooldown = milliseconds(100);
+### How to Contribute
 
-// In game loop:
-if (moveClock.getElapsedTime() >= moveCooldown) {
-    // Allow movement
-    if (Keyboard::isKeyPressed(Keyboard::Left)) {
-        // Move left
-        moveClock.restart();  // Reset timer
-    }
-}
-```
+1. **Fork the Repository**
+   ```bash
+   git clone https://github.com/Abdurrafay19/pf_project.git
+   ```
 
-**Why cooldowns exist:**
-- Without them, 60 FPS means 60 movements per second (too fast)
-- Cooldown of 100ms = max 10 movements/second (playable speed)
+2. **Create a Feature Branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-**Spawning Timers:**
-```cpp
-Clock meteorSpawnClock;
-float nextSpawnTime = 1.0f + (rand() % 3);  // Random 1-3 seconds
+3. **Make Your Changes**
+   - Follow existing code style
+   - Add comments for complex logic
+   - Test thoroughly
 
-if (meteorSpawnClock.getElapsedTime().asSeconds() >= nextSpawnTime) {
-    // Spawn meteor
-    meteorSpawnClock.restart();
-    nextSpawnTime = 1.0f + (rand() % 3);  // Set next random interval
-}
-```
+4. **Commit Your Changes**
+   ```bash
+   git commit -m "Add: Brief description of changes"
+   ```
 
-**Why random intervals:**
-- Predictable spawns are boring
-- Randomness creates dynamic challenge
-- Each spawn sets a new random interval
+5. **Push to Your Fork**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
-**Timer Categories:**
-1. **Input Cooldowns**: `moveClock` (100ms), `bulletFireClock` (300ms), `menuClock` (200ms)
-2. **Spawn Timers**: `meteorSpawnClock`, `enemySpawnClock`, `bossSpawnClock`
-3. **Movement Timers**: `meteorMoveClock`, `enemyMoveClock`, `bulletMoveClock`
-4. **Effect Timers**: `hitEffectClock`, `invincibilityTimer`, `levelUpBlinkClock`
+6. **Open a Pull Request**
+   - Describe your changes
+   - Reference any related issues
+   - Include screenshots if UI-related
 
----
+### Contribution Guidelines
 
-## 9. The Game Loop
+- **Code Style**: Follow existing formatting and naming conventions
+- **Comments**: Document functions and complex logic
+- **Testing**: Ensure changes don't break existing functionality
+- **Assets**: Provide attribution for any new assets
+- **Documentation**: Update README if adding features
 
-### Structure (Lines ~640-2487)
-```cpp
-while (window.isOpen()) {
-    // 1. EVENT POLLING
-    Event event;
-    while (window.pollEvent(event)) {
-        if (event.type == Event::Closed)
-            window.close();
-    }
-    
-    // 2. STATE LOGIC (different for each state)
-    if (currentState == STATE_MENU) { /* menu logic */ }
-    else if (currentState == STATE_PLAYING) { /* game logic */ }
-    // ... other states
-    
-    // 3. RENDERING
-    window.clear(Color(40, 40, 40));
-    if (currentState == STATE_MENU) { /* draw menu */ }
-    else if (currentState == STATE_PLAYING) { /* draw game */ }
-    // ... other renders
-    window.display();
-}
-```
+### Bug Reports
 
-**Execution Flow (60 times per second):**
-1. **Event Polling**: Check if user closed window
-2. **Update Logic**: Based on `currentState`, execute appropriate game logic
-3. **Rendering**: Draw everything relevant to current state
-4. **Display**: Swap buffers (show what was drawn)
+Found a bug? Please open an issue with:
+- Detailed description
+- Steps to reproduce
+- Expected vs actual behavior
+- System information (OS, compiler, SFML version)
+- Console output or error messages
 
-**Performance Optimization**: Removed conflicting `sleep()` call - framerate limiting is now handled exclusively by `setFramerateLimit(60)` for more accurate timing.
+### Feature Requests
+
+Have an idea? Open an issue with:
+- Clear description of the feature
+- Use cases and benefits
+- Potential implementation approach (optional)
 
 ---
 
-## 10. State-Specific Logic
+## 📄 License
 
-### Playing State Breakdown (Lines 698-1371)
+This project is licensed under the **MIT License**.
 
-#### Input Handling (Lines 700-751)
-**Player Movement:**
-```cpp
-if (moveClock.getElapsedTime() >= moveCooldown) {
-    if (Keyboard::isKeyPressed(Keyboard::Left) && spaceshipCol > 0) {
-        grid[ROWS - 1][spaceshipCol] = 0;  // Clear old position
-        spaceshipCol--;                     // Update column variable
-        grid[ROWS - 1][spaceshipCol] = 1;  // Set new position
-        moveClock.restart();
-    }
-}
+```
+MIT License
+
+Copyright (c) 2025 Abdurrafay19
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
-**Why three steps:**
-1. Clear old grid position (set to 0)
-2. Update the `spaceshipCol` tracking variable
-3. Set new grid position (set to 1)
+### Third-Party Assets
 
-**Shooting:**
-```cpp
-if (Keyboard::isKeyPressed(Keyboard::Space) && bulletFireClock.getElapsedTime() >= bulletFireCooldown) {
-    int bulletRow = ROWS - 2;  // One row above spaceship
-    if (grid[bulletRow][spaceshipCol] == 0) {  // Only if empty
-        grid[bulletRow][spaceshipCol] = 3;  // Place bullet
-    }
-    bulletFireClock.restart();
-}
-```
+This project uses the following third-party resources:
 
-**Key detail**: Bullet spawns only if the cell above is empty (prevents stacking)
+**SFML (Simple and Fast Multimedia Library)**
+- License: zlib/png license
+- Website: https://www.sfml-dev.org/
 
-#### Spawning System (Lines 753-792)
-
-**Enemy Spawn Difficulty Scaling:**
-```cpp
-float baseTime = 2.5f - (level * 0.4f);  // Faster at higher levels
-float variance = 3.0f - (level * 0.4f);   // Less random at higher levels
-if (baseTime < 0.5f) baseTime = 0.5f;    // Minimum spawn time
-nextEnemySpawnTime = baseTime + (rand() % (int)variance);
-```
-
-**Level 1**: 2.5s base + 0-3s variance = 2.5-5.5s between spawns
-**Level 5**: 0.5s base + 0-1s variance = 0.5-1.5s between spawns (much faster!)
-
-**Boss Spawning Condition:**
-```cpp
-if (level >= 3 && bossSpawnClock.getElapsedTime().asSeconds() >= nextBossSpawnTime) {
-    // Spawn boss
-}
-```
-**Design**: Bosses only appear after Level 3 to introduce new challenge mid-game
+**Font and Graphics Assets**
+- Sourced from: [Specify if using free/open assets]
+- Ensure proper attribution if using specific asset packs
 
 ---
 
-## 11. Entity Movement & Collision
+## 👨‍💻 Credits
 
-### Movement Pattern: Bottom-to-Top Iteration
-```cpp
-for (int r = ROWS - 1; r >= 0; r--) {  // Start from bottom
-    for (int c = 0; c < COLS; c++) {
-        if (grid[r][c] == 2) {  // Found a meteor
-            // Move it down
-        }
-    }
-}
-```
+### Development
+- **Lead Developer**: Abdurrafay19
+- **Project Type**: Programming Fundamentals Course Project
+- **Framework**: SFML 2.5
+- **Language**: C++17
 
-**Why bottom-to-top:**
-- Prevents processing the same entity twice in one frame
-- Example: If we iterate top-to-bottom and move an entity from row 5 to row 6, when we reach row 6, we'd move it again to row 7 (wrong!)
+### Special Thanks
+- SFML development team for the excellent multimedia library
+- Open-source community for resources and inspiration
+- [Your course instructor/institution if applicable]
 
-### Collision Detection Example: Meteor Movement (Lines 795-823)
-```cpp
-if (grid[r][c] == 2) {  // Found meteor at position [r][c]
-    if (r == ROWS - 1) {  // At bottom edge
-        grid[r][c] = 0;   // Remove meteor
-    }
-    else {
-        grid[r][c] = 0;  // Clear current position
-        
-        if (grid[r + 1][c] == 0) {  // Next cell is empty
-            grid[r + 1][c] = 2;      // Move meteor down
-        }
-        else if (grid[r + 1][c] == 1) {  // Next cell has player
-            if (!isInvincible) {
-                lives--;
-                isInvincible = true;
-                invincibilityTimer.restart();
-            }
-            // Don't place meteor (it's destroyed)
-        }
-        else if (grid[r + 1][c] == 3) {  // Next cell has bullet
-            grid[r + 1][c] = 0;  // Destroy both (leave cell empty)
-            // Trigger hit effect
-        }
-    }
-}
-```
-
-**Collision Logic:**
-1. Check the cell you're moving into
-2. If empty (0): Move there
-3. If player (1): Deal damage, apply invincibility
-4. If bullet (3): Destroy both entities
-5. Always clear the old position first
-
-### Boss Firing Mechanism (Lines 1058-1098)
-```cpp
-bossMoveCounter++;  // Increment on each movement
-
-int firingInterval;
-if (level == 3) firingInterval = 3;      // Fire every 3 moves
-else if (level == 4) firingInterval = 2; // Fire every 2 moves
-else firingInterval = 1;                 // Fire almost every move (level 5)
-
-if (bossMoveCounter >= firingInterval) {
-    // Find all bosses and fire bullets
-    for (int r = 0; r < ROWS; r++) {
-        for (int c = 0; c < COLS; c++) {
-            if (grid[r][c] == 5) {  // Found a boss
-                int bulletRow = r + 1;
-                if (grid[bulletRow][c] == 0) {
-                    grid[bulletRow][c] = 6;  // Place boss bullet
-                }
-            }
-        }
-    }
-    bossMoveCounter = 0;  // Reset counter
-}
-```
-
-**How it scales with difficulty:**
-- Level 3: Boss fires every 3rd time it moves
-- Level 4: Boss fires every 2nd time it moves
-- Level 5: Boss fires almost every time it moves
-
-**Why this matters:** Creates escalating difficulty as player progresses
-
-### Player Bullet Movement (Lines 1165-1337)
-**Special behavior: Moves UP instead of down**
-```cpp
-for (int r = 0; r < ROWS; r++) {  // Top-to-bottom for upward movement
-    for (int c = 0; c < COLS; c++) {
-        if (grid[r][c] == 3) {  // Found player bullet
-            if (r == 0) {  // At top edge
-                grid[r][c] = 0;  // Remove bullet
-            }
-            else {
-                grid[r][c] = 0;  // Clear current position
-                
-                if (grid[r - 1][c] == 4) {  // Hit enemy
-                    score += 3;
-                    killCount++;
-                    grid[r - 1][c] = 0;  // Destroy both
-                    
-                    // Check for progression using killCount
-                    if (level < MAX_LEVEL && killCount >= level * 10) {
-                        // Clear grid, recenter ship, blink LEVEL UP
-                        currentState = STATE_LEVEL_UP;
-                    }
-                    else if (level >= MAX_LEVEL && killCount >= level * 10) {
-                        currentState = STATE_VICTORY;
-                    }
-                }
-                else if (grid[r - 1][c] == 5) {  // Hit boss
-                    score += 5;  // Bosses worth more
-                    killCount++;
-                    grid[r - 1][c] = 0;
-                    
-                    // Same level-up or victory logic as above
-                    if (level < MAX_LEVEL && killCount >= level * 10) {
-                        currentState = STATE_LEVEL_UP;
-                    }
-                    else if (level >= MAX_LEVEL && killCount >= level * 10) {
-                        currentState = STATE_VICTORY;
-                    }
-                }
-            }
-        }
-    }
-}
-```
-
-**Level Up Trigger:**
-1. Player destroys enemy → `score += 3`, `killCount++`
-2. Player destroys boss → `score += 5`, `killCount++`
-3. Player destroys meteor → `score += (rand() % 2) + 1` (no killCount change)
-4. Check if `killCount >= level * 10`
-5. If true: Increment level, reset killCount to 0, clear all entities, show "LEVEL UP!" screen
-6. After 2 seconds, return to gameplay with increased difficulty
-
-**Key Change**: Level progression now based on `killCount` (enemies/bosses only), while `score` includes all points including meteor bonuses.
+### Contact
+- **GitHub**: [@Abdurrafay19](https://github.com/Abdurrafay19)
+- **Repository**: [pf_project](https://github.com/Abdurrafay19/pf_project)
+- **Issues**: [Report bugs or request features](https://github.com/Abdurrafay19/pf_project/issues)
 
 ---
 
-## 12. Rendering Pipeline
+## 📊 Project Statistics
 
-### Rendering Order (Lines 1522-1850)
-```cpp
-window.clear(Color(40, 40, 40));  // Dark gray background
-
-if (currentState == STATE_PLAYING) {
-    // 1. Draw background (covers whole grid area)
-    window.draw(background);
-    
-    // 2. Draw grid border
-    window.draw(gameBox);
-    
-    // 3. Draw all entities by scanning the grid
-    for (int r = 0; r < ROWS; r++) {
-        for (int c = 0; c < COLS; c++) {
-            if (grid[r][c] == 1) {  // Spaceship
-                spaceship.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
-                window.draw(spaceship);
-            }
-            else if (grid[r][c] == 2) {  // Meteor
-                meteor.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
-                window.draw(meteor);
-            }
-            // ... all entity types
-        }
-    }
-    
-    // 4. Draw hit effects (explosion animations)
-    for (int i = 0; i < MAX_HIT_EFFECTS; i++) {
-        if (hitEffectActive[i]) {
-            bulletHit.setPosition(MARGIN + hitEffectCol[i] * CELL_SIZE, 
-                                  MARGIN + hitEffectRow[i] * CELL_SIZE);
-            window.draw(bulletHit);
-        }
-    }
-    
-    // 5. Draw UI (score, lives, level)
-    window.draw(title);
-    window.draw(scoreText);
-    // ... other UI elements
-}
-
-window.display();  // Show everything drawn this frame
-```
-
-**Why this order matters:**
-1. Background first (back layer)
-2. Entities next (middle layer)
-3. Effects on top (explosions should be visible over everything)
-4. UI last (front layer, always visible)
-
-### Position Calculation
-```cpp
-pixelX = MARGIN + col * CELL_SIZE
-pixelY = MARGIN + row * CELL_SIZE
-```
-
-**Example:**
-- Grid position: `[5][7]` (row 5, col 7)
-- Pixel position: `MARGIN + 7 * 40, MARGIN + 5 * 40` = `(320, 240)` pixels
-
-### Invincibility Blink Effect (Lines 1615-1621)
-```cpp
-if (grid[r][c] == 1) {  // Spaceship
-    spaceship.setPosition(MARGIN + c * CELL_SIZE, MARGIN + r * CELL_SIZE);
-    
-    // Only draw if NOT invincible OR if current blink state is visible
-    if (!isInvincible || ((int)(invincibilityTimer.getElapsedTime().asMilliseconds() / 100) % 2 == 0)) {
-        window.draw(spaceship);
-    }
-}
-```
-
-**How blink works:**
-1. Get elapsed milliseconds since hit (e.g., 350ms)
-2. Divide by 100 (3.5) → cast to int (3)
-3. Modulo 2 (3 % 2 = 1)
-4. If result is 0: Draw spaceship
-5. If result is 1: Skip drawing (invisible for that frame)
-
-**Result:** Spaceship flickers on/off every 100ms during invincibility period
+- **Total Lines of Code**: ~1,730 lines
+- **Development Time**: [Your timeframe]
+- **Language**: C++ (100%)
+- **Dependencies**: SFML 2.5, CMake 3.10+
+- **Asset Count**: 13 images, 10 sounds, 1 font
+- **Game States**: 7
+- **Entity Types**: 6
+- **Total Levels**: 5
 
 ---
 
-## 13. How Everything Links Together
+## 🎓 Educational Value
 
-### The Complete Game Cycle
+This project demonstrates proficiency in:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    GAME STARTS                               │
-│                    main() called                             │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│              INITIALIZATION PHASE                            │
-│  • Seed random generator (srand)                             │
-│  • Create window (1180x1000)                                 │
-│  • Initialize variables (lives=3, score=0, level=1)          │
-│  • Create grid[23][15] = {0}                                 │
-│  • Load all textures and create sprites                      │
-│  • Create all text objects for UI                            │
-│  • Initialize all clocks                                     │
-│  • Set currentState = STATE_MENU                             │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  MAIN GAME LOOP                              │
-│              while (window.isOpen())                         │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-         ┌───────────────┴───────────────┐
-         │                               │
-         ▼                               ▼
-┌──────────────────┐          ┌────────────────────┐
-│ EVENT POLLING    │          │  STATE LOGIC       │
-│ • Window closed? │──────────▶│  Based on         │
-│                  │          │  currentState:     │
-└──────────────────┘          │                    │
-                              │  • STATE_MENU      │
-                              │  • STATE_PLAYING   │
-                              │  • STATE_PAUSED    │
-                              │  • STATE_GAME_OVER │
-                              │  • etc.            │
-                              └────────┬───────────┘
-                                       │
-                                       ▼
-                              ┌────────────────────┐
-                              │   RENDERING        │
-                              │  • Clear screen    │
-                              │  • Draw based on   │
-                              │    currentState    │
-                              │  • Display frame   │
-                              └────────┬───────────┘
-                                       │
-                                       ▼
-                              ┌────────────────────┐
-                              │  Sleep(50ms)       │
-                              │  Loop continues    │
-                              └────────┬───────────┘
-                                       │
-                                       └──────────┐
-                                                  │
-                  (Loops back 60 times/second) ◀──┘
-```
+### Programming Concepts
+- **Object-Oriented Design**: Sprite management, state machines
+- **Data Structures**: 2D arrays, parallel arrays
+- **Control Flow**: Complex state management with switch/if-else
+- **File I/O**: Save system implementation
+- **Random Number Generation**: Procedural spawning
+- **Timing and Clocks**: Event scheduling and cooldowns
 
-### STATE_PLAYING Deep Dive (The Core Gameplay Loop)
+### Game Development
+- **Game Loop Architecture**: Update-render cycle
+- **Collision Detection**: Grid-based collision systems
+- **State Management**: Multiple game states
+- **Difficulty Scaling**: Progressive challenge increase
+- **Audio Integration**: Music and sound effect management
+- **Asset Loading**: Resource management
 
-```
-STATE_PLAYING Logic Flow (executed every frame):
-═══════════════════════════════════════════════
-
-1. INPUT HANDLING
-   ├─ Check if P pressed → Switch to STATE_PAUSED
-   ├─ Check moveClock cooldown
-   │  └─ If Left/Right pressed → Update grid, move spaceship
-   └─ Check bulletFireClock cooldown
-      └─ If Space pressed → Place bullet at grid[ROWS-2][spaceshipCol]
-
-2. ENTITY SPAWNING (Time-based)
-   ├─ Check meteorSpawnClock
-   │  └─ If elapsed >= nextSpawnTime → Place meteor at grid[0][randomCol]
-   ├─ Check enemySpawnClock
-   │  └─ If elapsed >= nextEnemySpawnTime → Place enemy at grid[0][randomCol]
-   └─ Check bossSpawnClock (only if level >= 3)
-      └─ If elapsed >= nextBossSpawnTime → Place boss at grid[0][randomCol]
-
-3. ENTITY MOVEMENT & COLLISION
-   ├─ Meteor Movement (every 0.833 seconds)
-   │  └─ For each meteor: Try move down, check collisions
-   ├─ Enemy Movement (speed based on level)
-   │  └─ For each enemy: Try move down, check collisions, award points
-   ├─ Boss Movement (speed based on level)
-   │  ├─ For each boss: Try move down, check collisions
-   │  └─ Increment bossMoveCounter, fire bullets based on interval
-   ├─ Boss Bullet Movement (twice as fast as boss)
-   │  └─ For each boss bullet: Move down, check player collision
-   └─ Player Bullet Movement (very fast, 0.05s)
-      └─ For each bullet: Move up, check enemy/boss collision, level up logic
-
-4. EFFECT UPDATES
-    ├─ Update hit effect timers
-    │  └─ Deactivate effects after 0.3 seconds
-    └─ Update invincibility timer
-        └─ Set isInvincible = false after 2.0 seconds
-
-5. STATE TRANSITIONS
-    ├─ If lives <= 0 → currentState = STATE_GAME_OVER
-    ├─ If level < MAX_LEVEL && killCount >= level * 10 → currentState = STATE_LEVEL_UP
-    └─ If level >= MAX_LEVEL && killCount >= level * 10 → currentState = STATE_VICTORY
-```
-
-### Data Flow: How Grid Changes Affect Everything
-
-```
-GRID UPDATE TRIGGERS VISUAL CHANGES:
-════════════════════════════════════
-
-User presses LEFT key
-    ↓
-moveClock check passes (100ms elapsed)
-    ↓
-grid[ROWS-1][spaceshipCol] = 0  (clear old)
-spaceshipCol--                   (update variable)
-grid[ROWS-1][spaceshipCol] = 1  (set new)
-    ↓
-RENDERING PHASE:
-    ↓
-Scan grid at [ROWS-1][spaceshipCol-1]
-    ↓
-Find value = 1 (spaceship)
-    ↓
-Calculate pixel position:
-    x = MARGIN + (spaceshipCol-1) * 40
-    y = MARGIN + (ROWS-1) * 40
-    ↓
-Set spaceship sprite position
-    ↓
-Draw spaceship at new position
-    ↓
-Player sees spaceship moved left
-```
-
-### Level Progression Flow
-
-```
-LEVEL UP SEQUENCE (NEW SYSTEM):
-═══════════════════════════════
-
-Player bullet hits enemy
-    ↓
-score += 3 (points for display)
-killCount++ (progress tracker)
-    ↓
-Check: killCount >= level * 10?  (10 >= 10? YES)
-    ↓
-level++ (now level = 2)
-killCount = 0 (reset for next level)
-bossMoveCounter = 0
-    ↓
-Clear entire grid (except spaceship)
-Clear all shield powerups
-    ↓
-Reset spaceship to center
-    ↓
-currentState = STATE_LEVEL_UP
-levelUpTimer.restart()
-    ↓
-RENDERING: Show "LEVEL UP!" with blink effect
-    ↓
-Wait 2 seconds (levelUpTimer check)
-    ↓
-currentState = STATE_PLAYING
-    ↓
-GAMEPLAY RESUMES WITH INCREASED DIFFICULTY:
-    ├─ Meteor spawn time reduced
-    ├─ Meteor movement speed increased
-    ├─ Enemy spawn time reduced (scales with level)
-    ├─ Enemy movement speed increased
-    ├─ Boss spawn time reduced (if level >= 3)
-    ├─ Boss movement speed increased
-    ├─ Boss firing frequency increased (level 3: every 5 moves, level 4: every 4, level 5: every 3)
-    └─ Shield powerups begin spawning (level 3+)
-
-KEY CHANGE: killCount tracks only enemies/bosses for level progression.
-Score includes everything (enemies=3, bosses=5, meteors=1-2 random) for display/high score.
-```
-
-### Save File Persistence
-
-```
-SAVE/LOAD SYSTEM:
-═════════════════
-
-Save Triggers:
-- Game Over: Saves high score if current score > previous high score
-- Victory: Saves high score if current score > previous high score  
-- Pause Menu → Save & Quit: Saves high score AND current game state
-- Enemy Escape (bottom of screen): Saves high score if new record
-
-Load Options:
-- Main Menu → Load Saved Game: Restores lives, score, level (killCount resets to 0)
-
-File Format: "highScore lives score level"
-Example: "150 2 75 3" means:
-  - High score: 150 points
-  - Saved game: 2 lives, 75 points, Level 3
-  - If lives=0, no saved game available
-
-Storage Location: save-file.txt in project root
-```
-
-### Collision Resolution Priority
-
-```
-ENTITY INTERACTION MATRIX:
-═════════════════════════
-
-When Entity A tries to move into Entity B's cell:
-
-           │ Empty │ Player │ Meteor │ P.Bullet │ Enemy │ Boss │ B.Bullet │ Shield
-═══════════╪═══════╪════════╪════════╪══════════╪═══════╪══════╪══════════╪════════
-Meteor     │ Move  │ Damage*│ Pass   │ Destroy+ │ Pass  │ Pass │ Pass     │ N/A
-Enemy      │ Move  │ Damage*│ Pass   │ +3/Kill  │ Pass  │ Pass │ Pass     │ N/A
-Boss       │ Move  │ Damage*│ Pass   │ +5/Kill  │ Pass  │ Pass │ Pass     │ N/A
-P.Bullet   │ Move  │ Block  │Destroy+│ Pass     │+3/Kill│+5/Kill│ Destroy │ N/A
-B.Bullet   │ Move  │ Damage*│ Pass   │ Destroy  │ Pass  │ Pass │ Pass     │ N/A
-ShieldPwrUp│ Move  │ Collect│ Pass   │ Pass     │ Pass  │ Pass │ Pass     │ N/A
-
-Legend:
-- Move: Entity moves into cell
-- Damage*: Player loses life (or shield absorbs), entity destroyed, 1s invincibility
-- Pass: Entity phases through
-- Destroy: Both entities destroyed
-- Destroy+: Both destroyed, +1-2 random bonus points
-- +X/Kill: Entity destroyed, player gains X points AND killCount++
-- Block: Bullet cannot move there
-- Collect: Shield powerup consumed, hasShield = true
-- N/A: Shield powerups tracked separately, don't interact with this entity type
-
-NEW SCORING:
-- Enemies: 3 points + killCount++ (toward level progression)
-- Bosses: 5 points + killCount++ (toward level progression)
-- Meteors: 1-2 random points (bonus only, no killCount)
-```
-
-### Memory & Performance Considerations
-
-**Why Grid-Based Design is Efficient:**
-1. **Fixed Memory**: `grid[23][15]` = 345 integers (1,380 bytes) regardless of entity count
-2. **O(1) Collision Detection**: Just check `grid[targetRow][targetCol]`
-3. **Predictable Performance**: Always scan exactly 345 cells per frame
-4. **Optimized Constants**: `BULLET_OFFSET_X` and `SHIELD_OFFSET` calculated once at compile-time instead of every frame
-
-**Shield Powerup Optimization:**
-- Separate array system (5 slots) prevents grid interference
-- Independent movement logic avoids complex grid scanning
-- Direct position tracking (row/col) enables fast collision checks
-
-**Performance Optimizations Applied:**
-- Removed redundant per-frame calculations (5 xOffset calculations → 1 constant)
-- Removed conflicting timing controls (sleep + framerate limit → framerate limit only)
-- Removed debug output (50+ cout statements) for cleaner execution
-- Pre-calculated offsets at compile-time reduce runtime overhead
-
-**Alternative (Object-Oriented) Would Require:**
-- Dynamic arrays of enemy/bullet objects
-- O(n²) collision checks (check each bullet against each enemy)
-- Memory allocation/deallocation overhead
-
-### Timing Synchronization
-
-```
-FRAME TIMING AT 60 FPS:
-═══════════════════════
-
-Frame Duration: ~16.67ms (60 FPS cap)
-
-Within each frame:
-├─ Event Polling: ~0.1ms
-├─ State Logic:
-│  ├─ Input checks: ~0.5ms
-│  ├─ Spawning logic: ~1ms
-│  ├─ Movement & collision: ~3-5ms (depends on entity count)
-│  ├─ Shield powerup updates: ~0.3ms
-│  └─ Effect updates: ~0.5ms
-├─ Rendering:
-│  ├─ Clear screen: ~0.5ms
-│  ├─ Draw background: ~1ms
-│  ├─ Draw entities: ~3-8ms (depends on entity count)
-│  ├─ Draw shield powerups: ~0.2ms
-│  ├─ Draw effects: ~0.5ms
-│  └─ Draw UI: ~1ms
-└─ Display: ~1ms (buffer swap)
-
-Total: ~12-18ms per frame (leaves ~5ms headroom at 60 FPS)
-
-**Optimization**: Removed sleep(50ms) call that was conflicting with setFramerateLimit(60).
-Now timing is handled exclusively by SFML's built-in frame limiter for accurate 60 FPS.
-```
-
-### Complete State Dependency Graph
-
-```
-VARIABLE DEPENDENCIES:
-═════════════════════
-
-currentState (Master Controller)
-    ├─ Controls which logic executes
-    ├─ Controls what gets rendered
-    └─ Modified by:
-        ├─ User input (Enter, P, Esc, menu navigation)
-        ├─ lives <= 0 → STATE_GAME_OVER
-        ├─ killCount >= level * 10 → STATE_LEVEL_UP
-        └─ level > MAX_LEVEL → STATE_VICTORY
-
-lives
-    ├─ Decreased by: Meteor hit, Enemy hit, Boss hit, Boss bullet hit
-    ├─ Protected by: isInvincible flag AND hasShield
-    ├─ Shield absorbs first hit, then removed
-    └─ Triggers: STATE_GAME_OVER when <= 0
-
-score (Display/High Score Only)
-    ├─ Increased by: 
-    │   ├─ Destroying enemies (+3 points)
-    │   ├─ Destroying bosses (+5 points)
-    │   └─ Destroying meteors (+1-2 random points)
-    ├─ Saved to file when: New high score achieved
-    └─ Does NOT affect level progression (killCount does)
-
-killCount (Level Progression Tracker)
-    ├─ Increased by: Destroying enemies (+1), Destroying bosses (+1)
-    ├─ NOT increased by: Destroying meteors
-    ├─ Reset to 0 on: Level up, Load saved game
-    └─ Triggers: STATE_LEVEL_UP when >= level * 10
-
-level
-    ├─ Increased by: Reaching killCount threshold
-    ├─ Affects: 
-    │   ├─ All entity movement speeds (faster per level)
-    │   ├─ Spawn rates (more frequent per level)
-    │   ├─ Boss appearance (level 3+)
-    │   ├─ Boss firing rate (level 3: 1/5, level 4: 1/4, level 5: 1/3 moves)
-    │   └─ Shield powerup spawning (level 3+)
-    └─ Triggers: STATE_VICTORY when > MAX_LEVEL with enough kills
-
-grid[ROWS][COLS] (Core Game State)
-    ├─ Modified by: Spawning, Movement, Collision resolution
-    ├─ Read by: Rendering loop, Collision detection
-    └─ Cleared on: Game start, Level up, Load saved game
-
-shieldPowerup Arrays (Independent System)
-    ├─ Tracks: Up to 5 simultaneous shield powerups
-    ├─ Modified by: Spawning (level 3+), Movement (0.5s intervals), Collection
-    ├─ Movement: Straight down every 0.5s (direction array kept for future zigzag logic)
-    ├─ Collision: Checked against grid position before/after movement
-    └─ Cleared on: Game start, Level up, Load saved game
-
-hasShield
-    ├─ Set true on: Collecting shield powerup
-    ├─ Set false on: Absorbing any damage (one-time use)
-    └─ Affects: Damage prevention (one hit), Visual overlay rendering
-
-isInvincible
-    ├─ Set true on: Any damage (after shield check)
-    ├─ Set false after: 2 seconds (invincibilityTimer)
-    └─ Affects: Damage prevention, Rendering (blink effect)
-
-highScore (Persistent)
-    ├─ Loaded from: save-file.txt on startup
-    ├─ Updated when: Current score exceeds previous high score
-    ├─ Saved to file on: Game over, Victory, Enemy escape, Save & Quit
-    └─ Displayed in: Main menu, Playing screen, Game over, Victory
-
-hasSavedGame (Persistent Check)
-    ├─ Determined by: savedLevel > 0 AND savedLives > 0
-    ├─ Affects: "Load Saved Game" menu option availability
-    └─ Enables: Game state restoration
-
-All Clocks
-    ├─ Restarted on: Specific actions (movement, spawning, shooting)
-    ├─ Read continuously: To check if cooldowns/intervals elapsed
-    └─ Control: Game timing, difficulty scaling, visual effects, powerup movement
-```
+### Software Engineering
+- **Build Systems**: CMake configuration
+- **Version Control**: Git workflow
+- **Code Organization**: Modular function design
+- **Documentation**: Comprehensive README
+- **Cross-platform Development**: Linux/Windows/macOS support
+- **Debugging**: Error handling and logging
 
 ---
 
-## Summary: The Complete Picture
+## 🎮 Gameplay Tips
 
-The game is a **state-driven, grid-based arcade shooter** with **persistent save system** where:
+### Beginner Tips
+1. **Stay Mobile**: Keep moving to avoid getting trapped
+2. **Shoot Constantly**: Maintain bullet pressure on enemies
+3. **Watch Boss Bullets**: Green lasers are your biggest threat
+4. **Collect Shields**: Always grab shield power-ups when available
+5. **Use Invincibility**: Take calculated risks during invincibility frames
 
-1. **The grid is the single source of truth** - all game logic revolves around reading and writing integer values to `grid[ROWS][COLS]`, with shield powerups tracked independently to avoid interference
+### Advanced Strategies
+1. **Positioning**: Center yourself between enemy columns for maximum coverage
+2. **Bullet Management**: Time shots to hit multiple stacked enemies
+3. **Boss Priority**: Focus fire on bosses before they accumulate
+4. **Shield Timing**: Save shields for boss encounters
+5. **Pattern Recognition**: Learn spawn patterns to predict danger zones
 
-2. **Timing controls everything** - SFML Clocks manage when entities spawn, move, and shoot, creating difficulty progression. Optimized with single framerate limiter (60 FPS) for accurate timing
+### Speedrun Tips
+1. **Optimize Movement**: Minimize unnecessary horizontal movement
+2. **Shoot Early**: Fire before enemies fully appear
+3. **Risk Management**: Use aggressive positioning in early levels
+4. **Level 5 Strategy**: Stay centered, prioritize bosses
+5. **Save Shield**: Keep shield active through critical moments
 
-3. **State machine provides structure** - `currentState` determines which code executes and what displays on screen, including new game over/victory score displays
+---
 
-4. **Collision is implicit** - No complex math; just check the value of the target cell before moving. Shield powerups use dual-phase collision detection (before/after movement)
+## 📚 Additional Resources
 
-5. **Rendering is reactive** - Every frame, scan the grid and draw sprites where entities exist, with optimized pre-calculated offsets for bullets and shields
+### SFML Learning
+- [Official SFML Tutorial](https://www.sfml-dev.org/tutorials/2.5/)
+- [SFML Documentation](https://www.sfml-dev.org/documentation/2.5.1/)
+- [SFML Game Development Book](https://www.packtpub.com/game-development/sfml-game-development)
 
-6. **Difficulty scales naturally** - As `level` increases:
-   - Spawn rates increase exponentially
-   - Movement speeds up through mathematical formulas
-   - Boss firing frequency increases (level 3: 1/5, level 4: 1/4, level 5: 1/3)
-    - Shield powerups spawn (level 3+) and fall straight down every 0.5s
+### C++ Resources
+- [C++ Reference](https://en.cppreference.com/)
+- [Learn C++](https://www.learncpp.com/)
+- [C++ Game Development Patterns](https://gameprogrammingpatterns.com/)
 
-7. **New scoring system separates progression from points**:
-   - `killCount` tracks enemies/bosses for level progression (10 per level)
-   - `score` includes everything (enemies=3, bosses=5, meteors=1-2) for display/high score
-   - Meteors provide bonus points without affecting level advancement
+### Game Development
+- [Game Programming Patterns](https://gameprogrammingpatterns.com/)
+- [Gamasutra Articles](https://www.gamasutra.com/)
+- [Indie Game Development Resources](https://www.reddit.com/r/gamedev/)
 
-8. **Persistence enables continuity**:
-   - High scores save automatically to `save-file.txt`
-   - Game state (lives, score, level) can be saved and restored
-   - Menu displays current high score
-   - Game over/victory screens show final score achieved
+---
 
-9. **Everything connects through shared variables** - `lives`, `score`, `killCount`, `level`, `grid`, `hasShield`, and `highScore` are accessed by multiple logic blocks, creating emergent gameplay
+<div align="center">
 
-10. **Performance optimizations applied**:
-    - Removed 50+ debug cout statements
-    - Pre-calculated bullet/shield offsets at compile-time
-    - Removed conflicting sleep() call
-    - Independent shield powerup tracking (5 simultaneous max)
+## 🌟 Star this repository if you found it helpful!
 
-The beauty of this design is its **simplicity and directness**: there's no hidden complexity, no abstraction layers. The entire game state is visible in a few key variables, making it easy to understand, debug, and modify. Recent optimizations maintain this clarity while improving performance and adding sophisticated features like persistent saves and advanced powerup systems.
+**Made with ❤️ and C++**
+
+[![GitHub stars](https://img.shields.io/github/stars/Abdurrafay19/pf_project?style=social)](https://github.com/Abdurrafay19/pf_project/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Abdurrafay19/pf_project?style=social)](https://github.com/Abdurrafay19/pf_project/network/members)
+
+**[⬆ Back to Top](#-space-shooter-game)**
+
+</div>
