@@ -111,7 +111,7 @@ The game features a robust save system, multiple game states, power-ups, visual 
 
 ---
 
-## 📸 Screenshots
+## 📸 Screens
 
 ### Main Menu
 The main menu features a starry background with options to start a new game, load a saved game, view instructions, or exit. The high score is prominently displayed.
@@ -167,8 +167,8 @@ sudo apt install libsfml-dev
 
 2. **Clone the Repository**:
 ```bash
-git clone https://github.com/Abdurrafay19/pf_project.git
-cd pf_project
+git clone https://github.com/Abdurrafay19/space_shooter.git
+cd space_shooter
 ```
 
 3. **Build the Project**:
@@ -193,8 +193,8 @@ sudo pacman -S base-devel cmake sfml
 
 2. **Clone and Build**:
 ```bash
-git clone https://github.com/Abdurrafay19/pf_project.git
-cd pf_project
+git clone https://github.com/Abdurrafay19/space_shooter.git
+cd space_shooter
 mkdir -p build && cd build
 cmake .. && cmake --build .
 ./sfml_project
@@ -225,8 +225,8 @@ sudo dnf install SFML-devel
 
 3. **Clone the Repository**:
 ```cmd
-git clone https://github.com/Abdurrafay19/pf_project.git
-cd pf_project
+git clone https://github.com/Abdurrafay19/space_shooter.git
+cd space_shooter
 ```
 
 4. **Build with CMake**:
@@ -263,8 +263,8 @@ brew install cmake sfml
 
 3. **Clone and Build**:
 ```bash
-git clone https://github.com/Abdurrafay19/pf_project.git
-cd pf_project
+git clone https://github.com/Abdurrafay19/space_shooter.git
+cd space_shooter
 mkdir -p build && cd build
 cmake .. && cmake --build .
 ./sfml_project
@@ -283,8 +283,8 @@ cmake .. && cmake --build .
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/Abdurrafay19/pf_project.git
-cd pf_project
+git clone https://github.com/Abdurrafay19/space_shooter.git
+cd space_shooter
 ```
 
 2. **Create build directory**:
@@ -319,7 +319,7 @@ The project uses a simple CMakeLists.txt that:
 
 ### Directory Structure After Build
 ```
-pf_project/
+space_shooter/
 ├── build/
 │   ├── sfml_project        # Executable
 │   ├── assets/             # Copied from source
@@ -1223,62 +1223,6 @@ If experiencing performance issues:
 
 ---
 
-## 🔮 Future Enhancements
-
-### Planned Features
-
-#### Gameplay Enhancements
-- [ ] **More Levels**: Extend to 10 levels with unique themes
-- [ ] **Boss Varieties**: Different boss types with unique attack patterns
-- [ ] **Power-up Diversity**: Health packs, double shot, rapid fire
-- [ ] **Difficulty Settings**: Easy, Normal, Hard modes
-- [ ] **Score Multipliers**: Combo system for consecutive kills
-- [ ] **Lives Power-up**: Rare collectible to gain extra life
-
-#### Visual Improvements
-- [ ] **Particle Effects**: Enhanced explosions with particle systems
-- [ ] **Animated Sprites**: Moving UFO parts, spinning meteors
-- [ ] **Background Parallax**: Multi-layer scrolling backgrounds
-- [ ] **Screen Shake**: On explosions and damage
-- [ ] **Fade Transitions**: Smooth state transitions
-
-#### Audio Enhancements
-- [ ] **Dynamic Music**: Different tracks per level
-- [ ] **Adaptive Audio**: Music intensity based on danger level
-- [ ] **More Sound Variants**: Multiple explosion sounds
-- [ ] **Voice Lines**: Boss taunts, power-up notifications
-
-#### UI/UX Features
-- [ ] **Leaderboard**: Top 10 high scores with names
-- [ ] **Statistics**: Total kills, accuracy percentage, play time
-- [ ] **Achievements**: Unlock badges for milestones
-- [ ] **Customization**: Choose ship color/type
-- [ ] **Settings Menu**: Volume control, key rebinding
-
-#### Technical Improvements
-- [ ] **Config File**: External configuration for game parameters
-- [ ] **Multiple Save Slots**: Save different playthroughs
-- [ ] **Replay System**: Record and playback gameplay
-- [ ] **Mod Support**: Custom levels and assets
-- [ ] **Resolution Options**: Windowed, fullscreen, custom sizes
-- [ ] **Controller Support**: Gamepad input
-
-#### Multiplayer (Long-term)
-- [ ] **Local Co-op**: Two-player split-screen
-- [ ] **Competitive Mode**: Head-to-head battles
-- [ ] **Online Leaderboards**: Global high score ranking
-
-### Known Limitations
-
-- **Single Resolution**: Fixed window size
-- **No Mobile Support**: Desktop-only (keyboard required)
-- **Limited Enemy AI**: Simple downward movement patterns
-- **Grid-Based**: Movement restricted to cells
-- **No Dodge Mechanic**: Cannot dodge through enemies
-- **One Save Slot**: Can only save one game at a time
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome! Whether it's bug fixes, new features, or documentation improvements, your help is appreciated.
@@ -1287,7 +1231,7 @@ Contributions are welcome! Whether it's bug fixes, new features, or documentatio
 
 1. **Fork the Repository**
    ```bash
-   git clone https://github.com/Abdurrafay19/pf_project.git
+   git clone https://github.com/Abdurrafay19/space_shooter.git
    ```
 
 2. **Create a Feature Branch**
@@ -1378,35 +1322,27 @@ This project uses the following third-party resources:
 - Website: https://www.sfml-dev.org/
 
 **Font and Graphics Assets**
-- Sourced from: [Specify if using free/open assets]
-- Ensure proper attribution if using specific asset packs
+- Sourced from: opengameart.org fonts.google.com
 
 ---
 
 ## 👨‍💻 Credits
 
 ### Development
-- **Lead Developer**: Abdurrafay19
 - **Project Type**: Programming Fundamentals Course Project
 - **Framework**: SFML 2.5
 - **Language**: C++17
 
-### Special Thanks
-- SFML development team for the excellent multimedia library
-- Open-source community for resources and inspiration
-- [Your course instructor/institution if applicable]
-
 ### Contact
 - **GitHub**: [@Abdurrafay19](https://github.com/Abdurrafay19)
-- **Repository**: [pf_project](https://github.com/Abdurrafay19/pf_project)
-- **Issues**: [Report bugs or request features](https://github.com/Abdurrafay19/pf_project/issues)
+- **Repository**: [space_shooter](https://github.com/Abdurrafay19/space_shooter)
+- **Issues**: [Report bugs or request features](https://github.com/Abdurrafay19/space_shooter/issues)
 
 ---
 
 ## 📊 Project Statistics
 
 - **Total Lines of Code**: ~1,730 lines
-- **Development Time**: [Your timeframe]
 - **Language**: C++ (100%)
 - **Dependencies**: SFML 2.5, CMake 3.10+
 - **Asset Count**: 13 images, 10 sounds, 1 font
@@ -1496,8 +1432,8 @@ This project demonstrates proficiency in:
 
 **Made with ❤️ and C++**
 
-[![GitHub stars](https://img.shields.io/github/stars/Abdurrafay19/pf_project?style=social)](https://github.com/Abdurrafay19/pf_project/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/Abdurrafay19/pf_project?style=social)](https://github.com/Abdurrafay19/pf_project/network/members)
+[![GitHub stars](https://img.shields.io/github/stars/Abdurrafay19/space_shooter?style=social)](https://github.com/Abdurrafay19/space_shooter/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Abdurrafay19/space_shooter?style=social)](https://github.com/Abdurrafay19/space_shooter/network/members)
 
 **[⬆ Back to Top](#-space-shooter-game)**
 
